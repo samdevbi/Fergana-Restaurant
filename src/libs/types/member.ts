@@ -16,6 +16,7 @@ export interface Member {
     memberDesc?: string;
     memberimage?: string;
     memberPoints: number;
+    restaurantId?: ObjectId;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -31,6 +32,7 @@ export interface MemberInput {
     memberDesc?: string;
     memberImage?: string;
     memberPoints?: number;
+    restaurantId?: ObjectId;
 }
 
 export interface LoginInput {

@@ -33,6 +33,7 @@ qrController.getMenu = async (req: Request, res: Response) => {
         const inquiry: ProductInquiry = {
             page: 1,
             limit: 1000, // Get all products
+            order: "createdAt", // Sort by creation date (descending by default)
         };
 
         const products = await productService.getProducts(inquiry);

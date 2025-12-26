@@ -47,7 +47,22 @@ export const handleConnection = (socket: ExtendedSocket) => {
         }
 
         const member = socket.member;
-        const restaurantId = member._id.toString(); // For now, using member._id as restaurantId
+        // Determine restaurantId: OWNER uses their own _id, STAFF/CHEFF use their restaurantId field
+        let restaurantId: string;
+        if (member.memberRole === MemberRole.OWNER) {
+            restaurantId = member._id.toString();
+        } else if (member.restaurantId) {
+            restaurantId = member.restaurantId.toString();
+        } else {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/ccfc49ab-4340-4773-be36-87b0c39da0bf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'socket.handler.ts:52', message: 'restaurantId missing for staff', data: { memberId: member._id.toString(), memberRole: member.memberRole }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'D' }) }).catch(() => { });
+            // #endregion
+            socket.emit("error", { message: "Staff member missing restaurantId" });
+            return;
+        }
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/ccfc49ab-4340-4773-be36-87b0c39da0bf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'socket.handler.ts:60', message: 'restaurantId determined', data: { memberId: member._id.toString(), memberRole: member.memberRole, restaurantId: restaurantId }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'D' }) }).catch(() => { });
+        // #endregion
 
         // Join restaurant room
         socket.join(`restaurant:${restaurantId}`);

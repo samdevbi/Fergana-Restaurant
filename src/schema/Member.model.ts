@@ -36,6 +36,11 @@ const memberSchema = new Schema(
         memberImage: {
             type: String,
         },
+        restaurantId: {
+            type: Schema.Types.ObjectId,
+            ref: "Member",
+            required: false,
+        },
     },
     { timestamps: true }   // CreatedAt and UpdatedAt
 );
