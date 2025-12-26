@@ -1,5 +1,5 @@
 import { ObjectId } from "mongoose";
-import { OrderStatus } from "../enums/order.enum";
+import { OrderStatus, PaymentStatus, OrderType } from "../enums/order.enum";
 import { Product } from "./product";
 
 export interface OrderItem {
@@ -14,15 +14,27 @@ export interface OrderItem {
 
 export interface Order {
     _id: ObjectId;
+    orderNumber: string;
+    restaurantId: ObjectId;
+    tableId: ObjectId;
+    tableNumber: number;
+    memberId?: ObjectId;
     orderTotal: number;
     orderDelivery: number;
     orderStatus: OrderStatus;
-    memberId: ObjectId;
+    orderType: OrderType;
+    paymentStatus: PaymentStatus;
+    paymentMethod?: string;
+    verifiedBy?: ObjectId;
+    verifiedAt?: Date;
+    completedBy?: ObjectId;
+    completedAt?: Date;
+    cancellationReason?: string;
     createdAt: Date;
     updatedAt: Date;
     /* from aggregations */
-    orderItems: OrderItem[]; 
-    productData: Product[];
+    orderItems?: OrderItem[];
+    productData?: Product[];
 }
 
 export interface OrderItemInput {
@@ -32,13 +44,38 @@ export interface OrderItemInput {
     orderId?: ObjectId;
 }
 
+export interface OrderCreateInput {
+    tableId: string;
+    items: OrderItemInput[];
+}
+
 export interface OrderInquiry {
     page: number;
     limit: number;
-    orderStatus: OrderStatus;
+    orderStatus?: OrderStatus;
 }
 
 export interface OrderUpdateInput {
     orderId: string;
     orderStatus: OrderStatus;
+}
+
+export interface PaymentVerificationInput {
+    orderId: string;
+    paymentMethod: string;
+    paymentProof?: string;
+}
+
+export interface OrderCompleteInput {
+    orderId: string;
+}
+
+export interface OrderCancelInput {
+    orderId: string;
+    reason?: string;
+}
+
+export interface OrderModifyItemsInput {
+    orderId: string;
+    items: OrderItemInput[];
 }
