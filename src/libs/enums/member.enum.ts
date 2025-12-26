@@ -1,6 +1,8 @@
-export enum MemberType {
-    USER = "USER",
-    RESTAURANT = "RESTAURANT",
+export enum MemberRole {
+    OWNER = "OWNER",
+    STAFF = "STAFF",
+    CHEFF = "CHEFF",
+    SUPERADMIN = "SUPERADMIN",
 }
 
 export enum MemberStatus {

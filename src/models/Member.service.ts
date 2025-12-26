@@ -1,7 +1,7 @@
 import MemberModel from "../schema/Member.model";
 import { MemberInput, Member, LoginInput, MemberUpdateInput } from "../libs/types/member";
 import Errors, { HttpCode, Message } from "../libs/Errors";
-import { MemberStatus, MemberType } from "../libs/enums/member.enum";
+import { MemberStatus, MemberRole } from "../libs/enums/member.enum";
 import * as bcrypt from "bcryptjs";
 import { shapeIntoMongooseObjectId } from "../libs/config";
 
@@ -56,7 +56,7 @@ public async login (input: LoginInput): Promise<Member> {
 }
 
 public async getRestaurant(): Promise<Member> {
-    const result = await this.memberModel.findOne({memberType: MemberType.RESTAURANT})
+    const result = await this.memberModel.findOne({memberRole: MemberRole.OWNER})
     .lean()
     .exec();
     if(!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
@@ -104,7 +104,7 @@ public async addUserPoint(member: Member, point: number): Promise<Member> {
     return await this.memberModel.findOneAndUpdate( 
         {
             _id: memberId,
-            memberType: MemberType.USER,
+            memberRole: MemberRole.STAFF,
             memberStatus: MemberStatus.ACTIVE,
         },
         { $inc: { memberPoints: point } },
@@ -115,7 +115,7 @@ public async addUserPoint(member: Member, point: number): Promise<Member> {
 // BSSR => Adminka
     public async processSignup(input: MemberInput): Promise<Member> {
         const exist = await this.memberModel
-        .findOne({memberType: MemberType.RESTAURANT})
+        .findOne({memberRole: MemberRole.OWNER})
         .exec();
 
         if(exist) throw new Errors(HttpCode.BAD_REQUEST, Message.CREATE_FAILED);
@@ -154,7 +154,7 @@ public async addUserPoint(member: Member, point: number): Promise<Member> {
     }
 
     public async getUsers(): Promise<Member[]> {
-        const result = await this.memberModel.find({ memberType: MemberType.USER}).exec();
+        const result = await this.memberModel.find({ memberRole: MemberRole.STAFF}).exec();
         if(!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
 
         return result;

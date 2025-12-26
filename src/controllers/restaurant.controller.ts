@@ -2,7 +2,7 @@ import { NextFunction, Request, Response, response } from "express";
 import { T } from "../libs/types/common";
 import MemberService from "../models/Member.service";
 import { AdminRequest, MemberInput } from "../libs/types/member";
-import { MemberType } from "../libs/enums/member.enum";
+import { MemberRole } from "../libs/enums/member.enum";
 import { LoginInput } from "../libs/types/member";
 import Errors, { HttpCode, Message } from "../libs/Errors";
 
@@ -51,7 +51,7 @@ restaurantController.processSignup = async (req: AdminRequest, res: Response) =>
 
         const newMember: MemberInput = req.body;
         newMember.memberImage = file?.path.replace(/\\/g, "/");;
-        newMember.memberType = MemberType.RESTAURANT;
+        newMember.memberRole = MemberRole.OWNER;
         const result = await memberService.processSignup(newMember);
 
         req.session.member = result;
@@ -146,7 +146,7 @@ restaurantController.verifyRestaurant = (
     res: Response,
     next: NextFunction
 ) => {
-        if(req.session?.member?.memberType === MemberType.RESTAURANT) {
+        if(req.session?.member?.memberRole === MemberRole.OWNER) {
             req.member = req.session.member;
             next();
         } else {

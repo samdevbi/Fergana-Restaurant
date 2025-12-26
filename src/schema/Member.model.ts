@@ -1,12 +1,12 @@
 import mongoose, { Schema } from "mongoose";
-import { MemberStatus, MemberType} from "../libs/enums/member.enum";
+import { MemberStatus, MemberRole } from "../libs/enums/member.enum";
 
 const memberSchema = new Schema(
     {
-        memberType: {
+        memberRole: {
             type: String,
-            enum: MemberType,
-            default: MemberType.USER,
+            enum: MemberRole,
+            default: MemberRole.STAFF,
         },
 
         memberStatus: {
@@ -15,15 +15,15 @@ const memberSchema = new Schema(
             default: MemberStatus.ACTIVE,
         },
 
-        memberNick: {
+        memberName: {
             type: String,
-            index: { unique: true, sparse: true},
+            index: { unique: true, sparse: true },
             required: true,
         },
 
         memberPhone: {
             type: String,
-            index: { unique: true, sparse: true},
+            index: { unique: true, sparse: true },
             required: true,
         },
 
@@ -33,24 +33,11 @@ const memberSchema = new Schema(
             required: true,
         },
 
-        memberAdress: {
-            type: String,
-        },
-
-        memberDesc: {
-            type: String,
-        },
-
         memberImage: {
             type: String,
         },
-
-        memberPoints: {
-            type: Number,
-            default: 0,
-        },
-    }, 
-    { timestamps: true}   // CreatedAt and UpdatedAt
+    },
+    { timestamps: true }   // CreatedAt and UpdatedAt
 );
 
 

@@ -1,13 +1,13 @@
 import express from "express";
 import { ObjectId }  from "mongoose";  
-import { MemberStatus, MemberType } from "../enums/member.enum";
+import { MemberStatus, MemberRole } from "../enums/member.enum";
 import { Request } from "express";
 import { Session } from "express-session";
 
 
 export interface Member {
     _id: ObjectId;
-    memberType: MemberType;
+    memberRole: MemberRole;
     memberStatus: MemberStatus;
     memberNick: string;
     memberPhone: string;
@@ -22,7 +22,7 @@ export interface Member {
 
 
 export interface MemberInput {
-    memberType?: MemberType;
+    memberRole?: MemberRole;
     memberStatus?: MemberStatus;
     memberNick: string;
     memberPhone: string;
