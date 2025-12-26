@@ -8,6 +8,7 @@ import qrController from "./controllers/qr.controller";
 import kitchenController from "./controllers/kitchen.controller";
 import serviceController from "./controllers/service.controller";
 import adminController from "./controllers/admin.controller";
+import { verifyKitchenStaff, verifyServiceStaff, verifyOwner } from "./libs/rbac/role.middleware";
 
 /* Member */
 router.get("/member/restaurant", memberController.getRestaurant)
@@ -79,11 +80,13 @@ router.get("/qr/order/:orderId/details", qrController.getOrderDetails);
 router.get(
     "/staff/kitchen/orders",
     memberController.verifyAuth,
+    verifyKitchenStaff,
     kitchenController.getOrders
 );
 router.get(
     "/staff/kitchen/order/:id",
     memberController.verifyAuth,
+    verifyKitchenStaff,
     kitchenController.getOrder
 );
 
@@ -91,36 +94,43 @@ router.get(
 router.get(
     "/staff/service/orders",
     memberController.verifyAuth,
+    verifyServiceStaff,
     serviceController.getOrders
 );
 router.get(
     "/staff/service/order/:id",
     memberController.verifyAuth,
+    verifyServiceStaff,
     serviceController.getOrder
 );
 router.post(
     "/staff/service/order/:id/verify-payment",
     memberController.verifyAuth,
+    verifyServiceStaff,
     serviceController.verifyPayment
 );
 router.post(
     "/staff/service/order/:id/complete",
     memberController.verifyAuth,
+    verifyServiceStaff,
     serviceController.completeOrder
 );
 router.post(
     "/staff/service/order/:id/cancel",
     memberController.verifyAuth,
+    verifyServiceStaff,
     serviceController.cancelOrder
 );
 router.put(
     "/staff/service/order/:id/items",
     memberController.verifyAuth,
+    verifyServiceStaff,
     serviceController.modifyOrderItems
 );
 router.get(
     "/staff/service/tables",
     memberController.verifyAuth,
+    verifyServiceStaff,
     serviceController.getTables
 );
 
@@ -128,46 +138,55 @@ router.get(
 router.get(
     "/admin/analytics/dashboard",
     memberController.verifyAuth,
+    verifyOwner,
     adminController.getDashboard
 );
 router.get(
     "/admin/analytics/revenue",
     memberController.verifyAuth,
+    verifyOwner,
     adminController.getRevenue
 );
 router.get(
     "/admin/analytics/items",
     memberController.verifyAuth,
+    verifyOwner,
     adminController.getPopularItems
 );
 router.get(
     "/admin/tables",
     memberController.verifyAuth,
+    verifyOwner,
     adminController.getTables
 );
 router.post(
     "/admin/tables",
     memberController.verifyAuth,
+    verifyOwner,
     adminController.createTable
 );
 router.put(
     "/admin/tables/:id",
     memberController.verifyAuth,
+    verifyOwner,
     adminController.updateTable
 );
 router.get(
     "/admin/staff",
     memberController.verifyAuth,
+    verifyOwner,
     adminController.getStaff
 );
 router.post(
     "/admin/staff",
     memberController.verifyAuth,
+    verifyOwner,
     adminController.createStaff
 );
 router.put(
     "/admin/staff/:id",
     memberController.verifyAuth,
+    verifyOwner,
     adminController.updateStaff
 );
 
