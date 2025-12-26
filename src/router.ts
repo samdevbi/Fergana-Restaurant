@@ -37,8 +37,14 @@ router.get("/member/top-users", memberController.getTopUsers);
 
 
 /* Product */
+router.post(
+    "/product/createProduct",
+    memberController.verifyAuth,
+    productController.createNewProduct
+);
+
 router.get(
-    "/product/all",
+    "/product/getAllProducts",
     productController.getProducts
 );
 
@@ -53,38 +59,38 @@ router.get(
 /* Order */
 
 router.post(
-    "/order/create",
+    "/order/createOrder",
     memberController.verifyAuth,
     orderController.createOrder
 );
 
 router.get(
-    "/order/all",
+    "/order/getAllMyOrders",
     memberController.verifyAuth,
     orderController.getMyOrders
 );
 
 router.post(
-    "/order/update",
+    "/order/updateOrder",
     memberController.verifyAuth,
     orderController.updateOrder
 );
 
 /* QR Customer Routes (Public - No Authentication) */
-router.get("/qr/:tableId/menu", qrController.getMenu);
-router.post("/qr/:tableId/order", qrController.createOrder);
-router.get("/qr/order/:orderId/status", qrController.getOrderStatus);
-router.get("/qr/order/:orderId/details", qrController.getOrderDetails);
+router.get("/qr/:tableId/getMenu", qrController.getMenu);
+router.post("/qr/:tableId/createOrder", qrController.createOrder);
+router.get("/qr/order/:orderId/getOrderStatus", qrController.getOrderStatus);
+router.get("/qr/order/:orderId/getOrderDetails", qrController.getOrderDetails);
 
 /* Kitchen Staff Routes (JWT + KITCHEN role) */
 router.get(
-    "/staff/kitchen/orders",
+    "/staff/kitchen/getOrders",
     memberController.verifyAuth,
     verifyKitchenStaff,
     kitchenController.getOrders
 );
 router.get(
-    "/staff/kitchen/order/:id",
+    "/staff/kitchen/getOrder/:id",
     memberController.verifyAuth,
     verifyKitchenStaff,
     kitchenController.getOrder
@@ -92,13 +98,13 @@ router.get(
 
 /* Service Staff Routes (JWT + SERVICE/OWNER role) */
 router.get(
-    "/staff/service/orders",
+    "/staff/service/getOrders",
     memberController.verifyAuth,
     verifyServiceStaff,
     serviceController.getOrders
 );
 router.get(
-    "/staff/service/order/:id",
+    "/staff/service/getOrder/:id",
     memberController.verifyAuth,
     verifyServiceStaff,
     serviceController.getOrder
@@ -122,13 +128,13 @@ router.post(
     serviceController.cancelOrder
 );
 router.put(
-    "/staff/service/order/:id/items",
+    "/staff/service/order/:id/modifyItems",
     memberController.verifyAuth,
     verifyServiceStaff,
     serviceController.modifyOrderItems
 );
 router.get(
-    "/staff/service/tables",
+    "/staff/service/getTables",
     memberController.verifyAuth,
     verifyServiceStaff,
     serviceController.getTables
@@ -136,37 +142,37 @@ router.get(
 
 /* Owner/Admin Routes (JWT + OWNER role) */
 router.get(
-    "/admin/analytics/dashboard",
+    "/admin/analytics/getDashboard",
     memberController.verifyAuth,
     verifyOwner,
     adminController.getDashboard
 );
 router.get(
-    "/admin/analytics/revenue",
+    "/admin/analytics/getRevenue",
     memberController.verifyAuth,
     verifyOwner,
     adminController.getRevenue
 );
 router.get(
-    "/admin/analytics/items",
+    "/admin/analytics/getPopularitems",
     memberController.verifyAuth,
     verifyOwner,
     adminController.getPopularItems
 );
 router.get(
-    "/admin/tables",
+    "/admin/getTables",
     memberController.verifyAuth,
     verifyOwner,
     adminController.getTables
 );
 router.post(
-    "/admin/tables",
+    "/admin/createTable",
     memberController.verifyAuth,
     verifyOwner,
     adminController.createTable
 );
 router.put(
-    "/admin/tables/:id",
+    "/admin/updateTables/:id",
     memberController.verifyAuth,
     verifyOwner,
     adminController.updateTable
@@ -178,13 +184,13 @@ router.get(
     adminController.getStaff
 );
 router.post(
-    "/admin/staff",
+    "/admin/createStaff",
     memberController.verifyAuth,
     verifyOwner,
     adminController.createStaff
 );
 router.put(
-    "/admin/staff/:id",
+    "/admin/updateStaff/:id",
     memberController.verifyAuth,
     verifyOwner,
     adminController.updateStaff

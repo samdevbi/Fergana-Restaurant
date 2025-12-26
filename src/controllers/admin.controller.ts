@@ -24,7 +24,7 @@ const adminController: T = {};
 adminController.getDashboard = async (req: ExtendedRequest, res: Response) => {
     try {
         console.log("getDashboard");
-        
+
         // Get restaurant owner (restaurantId)
         const restaurant = await memberService.getRestaurant();
         const restaurantId = restaurant._id;
@@ -75,7 +75,7 @@ adminController.getRevenue = async (req: ExtendedRequest, res: Response) => {
     try {
         console.log("getRevenue");
         const { period } = req.query; // day, week, month
-        
+
         // Get restaurant owner (restaurantId)
         const restaurant = await memberService.getRestaurant();
         const restaurantId = restaurant._id;
@@ -138,7 +138,7 @@ adminController.getPopularItems = async (req: ExtendedRequest, res: Response) =>
 adminController.getTables = async (req: ExtendedRequest, res: Response) => {
     try {
         console.log("getAdminTables");
-        
+
         // Get restaurant owner (restaurantId)
         const restaurant = await memberService.getRestaurant();
         const restaurantId = restaurant._id;
@@ -163,7 +163,7 @@ adminController.getTables = async (req: ExtendedRequest, res: Response) => {
 adminController.createTable = async (req: ExtendedRequest, res: Response) => {
     try {
         console.log("createTable");
-        
+
         // Get restaurant owner (restaurantId)
         const restaurant = await memberService.getRestaurant();
         const restaurantId = restaurant._id;
@@ -220,7 +220,7 @@ adminController.updateTable = async (req: ExtendedRequest, res: Response) => {
 adminController.getStaff = async (req: ExtendedRequest, res: Response) => {
     try {
         console.log("getStaff");
-        
+
         // Get all staff members (non-owner)
         const result = await memberService.getUsers();
 
@@ -242,15 +242,15 @@ adminController.getStaff = async (req: ExtendedRequest, res: Response) => {
 adminController.createStaff = async (req: ExtendedRequest, res: Response) => {
     try {
         console.log("createStaff");
-        
+
         const input: MemberInput = {
-            memberNick: req.body.memberNick,
+            memberName: req.body.memberName,
             memberPhone: req.body.memberPhone,
             memberPassword: req.body.memberPassword,
             memberRole: req.body.memberRole || MemberRole.STAFF,
         };
 
-        if (!input.memberNick || !input.memberPhone || !input.memberPassword) {
+        if (!input.memberName || !input.memberPhone || !input.memberPassword) {
             throw new Errors(HttpCode.BAD_REQUEST, Errors.standard.message);
         }
 
@@ -280,7 +280,7 @@ adminController.updateStaff = async (req: ExtendedRequest, res: Response) => {
         const input: MemberUpdateInput = {
             _id: id as any,
             memberStatus: req.body.memberStatus,
-            memberNick: req.body.memberNick,
+            memberName: req.body.memberName,
             memberPhone: req.body.memberPhone,
         };
 
