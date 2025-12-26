@@ -66,3 +66,4 @@ tableSchema.index({ status: 1 });
 
 export default mongoose.model("Table", tableSchema);
 
+

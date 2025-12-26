@@ -28,3 +28,4 @@ export interface TableUpdateInput {
     status?: TableStatus;
 }
 
+
