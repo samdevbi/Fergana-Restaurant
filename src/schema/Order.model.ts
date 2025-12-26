@@ -1,8 +1,39 @@
-import mongoose,  { Schema} from "mongoose";
-import { OrderStatus } from "../libs/enums/order.enum";
+import mongoose, { Schema } from "mongoose";
+import { OrderStatus, PaymentStatus, OrderType } from "../libs/enums/order.enum";
 
-const orderSchema = new Schema (
+const orderSchema = new Schema(
     {
+        orderNumber: {
+            type: String,
+            required: true,
+            unique: true,
+            index: true,
+        },
+
+        restaurantId: {
+            type: Schema.Types.ObjectId,
+            required: true,
+            ref: "Member",
+        },
+
+        tableId: {
+            type: Schema.Types.ObjectId,
+            required: true,
+            ref: "Table",
+        },
+
+        tableNumber: {
+            type: Number,
+            required: true,
+        },
+
+        memberId: {
+            type: Schema.Types.ObjectId,
+            required: false,
+            ref: "Member",
+            default: null,
+        },
+
         orderTotal: {
             type: Number,
             required: true,
@@ -16,16 +47,64 @@ const orderSchema = new Schema (
         orderStatus: {
             type: String,
             enum: OrderStatus,
-            default: OrderStatus.PAUSE,
+            default: OrderStatus.PENDING,
         },
-        
-        memberId: {
+
+        orderType: {
+            type: String,
+            enum: OrderType,
+            default: OrderType.QR_ORDER,
+        },
+
+        paymentStatus: {
+            type: String,
+            enum: PaymentStatus,
+            default: PaymentStatus.PENDING,
+        },
+
+        paymentMethod: {
+            type: String,
+            required: false,
+        },
+
+        verifiedBy: {
             type: Schema.Types.ObjectId,
-            required: true,
             ref: "Member",
+            required: false,
+            default: null,
+        },
+
+        verifiedAt: {
+            type: Date,
+            required: false,
+            default: null,
+        },
+
+        completedBy: {
+            type: Schema.Types.ObjectId,
+            ref: "Member",
+            required: false,
+            default: null,
+        },
+
+        completedAt: {
+            type: Date,
+            required: false,
+            default: null,
+        },
+
+        cancellationReason: {
+            type: String,
+            required: false,
         },
     },
     { timestamps: true }
-); 
+);
+
+// Indexes for efficient queries
+orderSchema.index({ tableId: 1, orderStatus: 1 });
+orderSchema.index({ restaurantId: 1, orderStatus: 1, createdAt: -1 });
+orderSchema.index({ paymentStatus: 1, orderStatus: 1 });
+orderSchema.index({ createdAt: -1 });
 
 export default mongoose.model("Order", orderSchema);
