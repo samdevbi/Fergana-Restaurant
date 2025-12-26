@@ -28,7 +28,7 @@ qrController.getMenu = async (req: Request, res: Response) => {
 
         // Check if table is available or has active order
         const activeOrder = await orderService.getOrderByTable(tableId);
-        
+
         // Get menu products for restaurant
         const inquiry: ProductInquiry = {
             page: 1,
