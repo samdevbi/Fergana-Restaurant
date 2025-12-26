@@ -19,6 +19,15 @@ import { ObjectId } from "mongoose";
 import { OrderStatus, PaymentStatus, OrderType } from "../libs/enums/order.enum";
 import MemberService from "./Member.service";
 import TableService from "./Table.service";
+import {
+  emitOrderUpdate,
+  notifyKitchen,
+  notifyServiceStaff,
+  notifyCustomer,
+  emitTableUpdate,
+  emitOrderStatusChange,
+} from "../libs/websocket/socket.handler";
+import { TableStatus } from "../libs/enums/table.enum";
 
 class OrderService {
   private readonly orderModel;
@@ -190,6 +199,15 @@ class OrderService {
       // Get full order with items
       const fullOrder = await this.getOrderById(orderId.toString());
 
+      // Emit WebSocket events
+      notifyCustomer(orderId.toString(), "order:created", {
+        orderId: orderId.toString(),
+        orderNumber: fullOrder.orderNumber,
+        orderStatus: fullOrder.orderStatus,
+      });
+      notifyServiceStaff(restaurantId.toString(), "payment:needs-verification", fullOrder);
+      emitTableUpdate(tableId, TableStatus.OCCUPIED, orderId);
+
       return fullOrder;
     } catch (err) {
       console.log("Error, model: createQROrder", err);
@@ -232,6 +250,18 @@ class OrderService {
       throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
     }
 
+    // Emit WebSocket events
+    if (order) {
+      emitOrderStatusChange(
+        id,
+        OrderStatus.CONFIRMED,
+        PaymentStatus.VERIFIED,
+        order.restaurantId,
+        order.tableId
+      );
+      notifyKitchen(order.restaurantId, result);
+    }
+
     return result;
   }
 
@@ -265,6 +295,13 @@ class OrderService {
 
     // Free table
     await this.tableService.freeTable(order.tableId);
+
+    // Emit WebSocket events
+    notifyCustomer(id, "order:completed", {
+      orderId: id,
+      orderStatus: OrderStatus.COMPLETED,
+    });
+    emitTableUpdate(order.tableId, TableStatus.AVAILABLE);
 
     return result;
   }
@@ -304,6 +341,14 @@ class OrderService {
 
     // Free table
     await this.tableService.freeTable(order.tableId);
+
+    // Emit WebSocket events
+    notifyCustomer(id, "order:cancelled", {
+      orderId: id,
+      orderStatus: OrderStatus.CANCELLED,
+      reason: input.reason,
+    });
+    emitTableUpdate(order.tableId, TableStatus.AVAILABLE);
 
     return result;
   }
@@ -349,6 +394,12 @@ class OrderService {
     if (!result) {
       throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
     }
+
+    // Emit WebSocket event
+    emitOrderUpdate(id, "order:item-modified", {
+      orderId: id,
+      items: input.items,
+    });
 
     return result;
   }
