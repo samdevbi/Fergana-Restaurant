@@ -40,7 +40,8 @@ const orderSchema = new Schema(
 
         orderDelivery: {
             type: Number,
-            required: true,
+            required: false,
+            default: 0,
         },
 
         orderStatus: {

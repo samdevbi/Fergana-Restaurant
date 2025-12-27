@@ -544,7 +544,7 @@ class OrderService {
     const result = await this.orderModel.findByIdAndUpdate(
       id,
       {
-        orderTotal: amount + order.orderDelivery,
+        orderTotal: amount + (order.orderDelivery || 0),
       },
       { new: true }
     ).exec();

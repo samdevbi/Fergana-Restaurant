@@ -20,7 +20,7 @@ export interface Order {
     tableNumber: number;
     memberId?: ObjectId;
     orderTotal: number;
-    orderDelivery: number;
+    orderDelivery?: number;
     orderStatus: OrderStatus;
     orderType: OrderType;
     paymentStatus: PaymentStatus;
