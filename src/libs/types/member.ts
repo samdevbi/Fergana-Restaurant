@@ -10,12 +10,8 @@ export interface Member {
     memberRole: MemberRole;
     memberStatus: MemberStatus;
     memberName: string;
-    memberPhone: string;
-    memberPassword?: string;
-    memberAdress?: string;
-    memberDesc?: string;
-    memberimage?: string;
-    memberPoints: number;
+    memberPassword: string;
+    memberImage?: string;
     restaurantId?: ObjectId;
     createdAt: Date;
     updatedAt: Date;
@@ -23,15 +19,11 @@ export interface Member {
 
 
 export interface MemberInput {
-    memberRole?: MemberRole;
-    memberStatus?: MemberStatus;
+    memberRole: MemberRole;
+    memberStatus: MemberStatus;
     memberName: string;
-    memberPhone: string;
     memberPassword: string;
-    memberAdress?: string;
-    memberDesc?: string;
     memberImage?: string;
-    memberPoints?: number;
     restaurantId?: ObjectId;
 }
 
@@ -43,11 +35,9 @@ export interface LoginInput {
 export interface MemberUpdateInput {
     _id: ObjectId;
     memberStatus?: MemberStatus;
+    memberRole?: MemberRole;
     memberName?: string;
-    memberPhone?: string;
     memberPassword?: string;
-    memberAdress?: string;
-    memberDesc?: string;
     memberImage?: string;
 }
 

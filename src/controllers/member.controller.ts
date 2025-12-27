@@ -15,8 +15,14 @@ const memberController: T = {};
 memberController.signup = async (req: Request, res: Response) => {
     try{
         console.log("Signup");
-        const input: MemberInput = req.body,
-          result: Member = await memberService.signup(input);
+        console.log("Request body:", req.body);
+        const input: MemberInput = req.body;
+        
+        if (!input.memberPassword) {
+            throw new Errors(HttpCode.BAD_REQUEST, Message.CREATE_FAILED);
+        }
+        
+        const result: Member = await memberService.signup(input);
           const token = await authService.createToken(result);
 
           res.cookie("acesstoken", token, {maxAge: AUTH_TIMER * 3600 *1000,

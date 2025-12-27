@@ -4,16 +4,16 @@ import { ProductCollection, ProductSize, ProductStatus } from "../enums/product.
 
 export interface Product {
     _id: ObjectId;
-    productStatus: ProductStatus;
-    productCollection: ProductCollection;
-    productName: string;
-    productPrice: number;
-    productLeftCount: number;
-    productSize: ProductSize;
-    productVolume: number;
-    productDesc?: string;
-    productImages: string[];
-    productViews: number;
+    productNameUz: string,
+    productNameKr: string,
+    productPrice: number,
+    productStatus: ProductStatus,
+    productCollection: ProductCollection,
+    productCcal: number,
+    productPrepTime: number,
+    productDesc: string,
+    productIngred: [string],
+    productImage: string,
 }
 
 export interface ProductInquiry {
@@ -26,28 +26,28 @@ export interface ProductInquiry {
 
 
 export interface ProductInput {
-    productStatus?: ProductStatus;
-    productCollection: ProductCollection;
-    productName: string;
-    productPrice: number;
-    productLeftCount: number;
-    productSize?: ProductSize;
-    productVolume?: number;
-    productDesc?: string;
-    productImages?: string[];
-    productViews?: number;
+    productNameUz: string,
+    productNameKr: string,
+    productPrice: number,
+    productStatus: ProductStatus,
+    productCollection: ProductCollection,
+    productCcal?: number,
+    productPrepTime?: number,
+    productDesc?: string,
+    productIngred?: [string],
+    productImage: string,
 }
 
 export interface ProductUpdateInput {
     _id: ObjectId;
-    productStatus?: ProductStatus;
-    productCollection?: ProductCollection;
-    productName?: string;
-    productPrice?: number;
-    productLeftCount?: number;
-    productSize?: ProductSize;
-    productVolume?: number;
-    productDesc?: string;
-    productImages?: string[];
-    productViews?: number;
+    productNameUz?: string,
+    productNameKr?: string,
+    productPrice?: number,
+    productStatus?: ProductStatus,
+    productCollection?: ProductCollection,
+    productCcal?: number,
+    productPrepTime?: number,
+    productDesc?: string,
+    productIngred?: [string],
+    productImage?: string,
 }

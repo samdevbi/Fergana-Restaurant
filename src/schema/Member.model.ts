@@ -21,21 +21,16 @@ const memberSchema = new Schema(
             required: true,
         },
 
-        memberPhone: {
-            type: String,
-            index: { unique: true, sparse: true },
-            required: true,
-        },
-
         memberPassword: {
             type: String,
             select: false,
             required: true,
         },
 
-        memberImage: {
+        memberImages: {
             type: String,
         },
+
         restaurantId: {
             type: Schema.Types.ObjectId,
             ref: "Member",
