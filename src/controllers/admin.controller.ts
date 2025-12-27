@@ -46,8 +46,10 @@ adminController.getDashboard = async (req: ExtendedRequest, res: Response) => {
 
         // Get all tables
         const tables = await tableService.getAllTables(restaurantId);
-        const availableTables = tables.filter(t => t.status === "AVAILABLE").length;
+        const activeTables = tables.filter(t => t.status === "ACTIVE").length;
         const occupiedTables = tables.filter(t => t.status === "OCCUPIED").length;
+        const pausedTables = tables.filter(t => t.status === "PAUSE").length;
+        const blockedTables = tables.filter(t => t.status === "BLOCK").length;
 
         res.status(HttpCode.OK).json({
             today: {
@@ -56,8 +58,10 @@ adminController.getDashboard = async (req: ExtendedRequest, res: Response) => {
             },
             tables: {
                 total: tables.length,
-                available: availableTables,
+                active: activeTables,
                 occupied: occupiedTables,
+                paused: pausedTables,
+                blocked: blockedTables,
             },
         });
     } catch (err) {

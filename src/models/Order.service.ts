@@ -157,7 +157,7 @@ class OrderService {
     if (input.isAddingToExisting && input.existingOrderId) {
       const existingOrderId = shapeIntoMongooseObjectId(input.existingOrderId);
       const order = await this.orderModel.findById(existingOrderId).exec();
-      
+
       if (!order || order.tableId.toString() !== tableId.toString()) {
         throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
       }
@@ -209,7 +209,8 @@ class OrderService {
     }
 
     // If table has active order and customer didn't confirm, ask for confirmation
-    if (existingOrder && !input.isAddingToExisting) {
+    // But allow creating new order if customer wants separate order
+    if (existingOrder && !input.isAddingToExisting && !input.existingOrderId) {
       const existingOrderDetails = await this.getOrderById(existingOrder._id.toString());
       return {
         needsConfirmation: true,
@@ -217,6 +218,7 @@ class OrderService {
       };
     }
 
+    // If customer explicitly wants new order (not adding to existing), create it
     // Calculate order total
     const amount = input.items.reduce((accumulator: number, item: OrderItemInput) => {
       return accumulator + item.itemPrice * item.itemQuantity;
@@ -246,7 +248,8 @@ class OrderService {
       await this.recordOrderItem(orderId, input.items);
 
       // Update table status (allow multiple orders, just mark as occupied if first order)
-      if (!existingOrder) {
+      // Check if table is already occupied
+      if (table.status !== TableStatus.OCCUPIED) {
         await this.tableService.occupyTable(tableId, orderId);
       }
 
@@ -345,15 +348,20 @@ class OrderService {
       throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
     }
 
-    // Free table
-    await this.tableService.freeTable(order.tableId);
+    // Check if there are other active orders on this table
+    const activeOrders = await this.getActiveOrdersByTable(order.tableId);
+
+    // Only free table if no other active orders exist
+    if (activeOrders.length === 0) {
+      await this.tableService.freeTable(order.tableId);
+      emitTableUpdate(order.tableId, TableStatus.ACTIVE);
+    }
 
     // Emit WebSocket events
     notifyCustomer(id, "order:completed", {
       orderId: id,
       orderStatus: OrderStatus.COMPLETED,
     });
-    emitTableUpdate(order.tableId, TableStatus.AVAILABLE);
 
     return result;
   }
@@ -391,8 +399,14 @@ class OrderService {
       throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
     }
 
-    // Free table
-    await this.tableService.freeTable(order.tableId);
+    // Check if there are other active orders on this table
+    const activeOrders = await this.getActiveOrdersByTable(order.tableId);
+
+    // Only free table if no other active orders exist
+    if (activeOrders.length === 0) {
+      await this.tableService.freeTable(order.tableId);
+      emitTableUpdate(order.tableId, TableStatus.ACTIVE);
+    }
 
     // Emit WebSocket events
     notifyCustomer(id, "order:cancelled", {
@@ -400,7 +414,6 @@ class OrderService {
       orderStatus: OrderStatus.CANCELLED,
       reason: input.reason,
     });
-    emitTableUpdate(order.tableId, TableStatus.AVAILABLE);
 
     return result;
   }
@@ -564,6 +577,77 @@ class OrderService {
         }
       })
       .sort({ createdAt: -1 })
+      .exec();
+
+    return result;
+  }
+
+  /**
+   * Get all orders for a table (order history - including completed/cancelled)
+   */
+  public async getAllOrdersByTable(tableId: ObjectId | string): Promise<Order[]> {
+    const id = shapeIntoMongooseObjectId(tableId);
+
+    const result = await this.orderModel
+      .aggregate([
+        { $match: { tableId: id } },
+        { $sort: { createdAt: -1 } }, // Most recent first
+        {
+          $lookup: {
+            from: "orderItems",
+            localField: "_id",
+            foreignField: "orderId",
+            as: "orderItems",
+          },
+        },
+        {
+          $lookup: {
+            from: "products",
+            localField: "orderItems.productId",
+            foreignField: "_id",
+            as: "productData",
+          },
+        },
+      ])
+      .exec();
+
+    return result;
+  }
+
+  /**
+   * Get active orders for a table with full details
+   */
+  public async getActiveOrdersByTableWithDetails(tableId: ObjectId | string): Promise<Order[]> {
+    const id = shapeIntoMongooseObjectId(tableId);
+
+    const result = await this.orderModel
+      .aggregate([
+        {
+          $match: {
+            tableId: id,
+            orderStatus: {
+              $nin: [OrderStatus.COMPLETED, OrderStatus.CANCELLED]
+            }
+          }
+        },
+        { $sort: { createdAt: -1 } },
+        {
+          $lookup: {
+            from: "orderItems",
+            localField: "_id",
+            foreignField: "orderId",
+            as: "orderItems",
+          },
+        },
+        {
+          $lookup: {
+            from: "products",
+            localField: "orderItems.productId",
+            foreignField: "_id",
+            as: "productData",
+          },
+        },
+      ])
       .exec();
 
     return result;

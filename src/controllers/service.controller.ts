@@ -170,28 +170,58 @@ serviceController.getOrder = async (req: ExtendedRequest, res: Response) => {
     }
 };
 
-/**
- * Get all tables with status
- * Requires: JWT authentication + SERVICE/OWNER role
- */
-serviceController.getTables = async (req: ExtendedRequest, res: Response) => {
-    try {
-        // Get restaurant owner (restaurantId)
-        const restaurant = await memberService.getRestaurant();
-        const restaurantId = restaurant._id;
+    /**
+     * Get all tables with status
+     * Requires: JWT authentication + SERVICE/OWNER role
+     */
+    serviceController.getTables = async (req: ExtendedRequest, res: Response) => {
+        try {
+            // Get restaurant owner (restaurantId)
+            const restaurant = await memberService.getRestaurant();
+            const restaurantId = restaurant._id;
 
-        const result = await tableService.getAllTables(restaurantId);
+            const result = await tableService.getAllTables(restaurantId);
 
-        res.status(HttpCode.OK).json({
-            tables: result,
-            count: result.length,
-        });
-    } catch (err) {
-        console.log("Error, getServiceTables:", err);
-        if (err instanceof Errors) res.status(err.code).json(err);
-        else res.status(Errors.standard.code).json(Errors.standard);
-    }
-};
+            res.status(HttpCode.OK).json({
+                tables: result,
+                count: result.length,
+            });
+        } catch (err) {
+            console.log("Error, getServiceTables:", err);
+            if (err instanceof Errors) res.status(err.code).json(err);
+            else res.status(Errors.standard.code).json(Errors.standard);
+        }
+    };
+
+    /**
+     * Get table with order history
+     * Requires: JWT authentication + SERVICE/OWNER role
+     */
+    serviceController.getTableWithHistory = async (req: ExtendedRequest, res: Response) => {
+        try {
+            const { tableId } = req.params;
+
+            const result = await tableService.getTableWithOrderHistory(tableId);
+
+            res.status(HttpCode.OK).json({
+                table: {
+                    _id: result._id,
+                    tableNumber: result.tableNumber,
+                    status: result.status,
+                    capacity: result.capacity,
+                    location: result.location,
+                },
+                activeOrders: result.activeOrders,
+                orderHistory: result.orderHistory,
+                totalOrders: result.orderHistory.length,
+                activeOrdersCount: result.activeOrders.length,
+            });
+        } catch (err) {
+            console.log("Error, getTableWithHistory:", err);
+            if (err instanceof Errors) res.status(err.code).json(err);
+            else res.status(Errors.standard.code).json(Errors.standard);
+        }
+    };
 
 export default serviceController;
 

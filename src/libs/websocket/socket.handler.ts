@@ -184,6 +184,6 @@ export const emitOrderStatusChange = (
     }
 
     // Notify table room
-    emitTableUpdate(tableId, orderStatus === OrderStatus.COMPLETED ? TableStatus.AVAILABLE : TableStatus.OCCUPIED, orderIdStr);
+    emitTableUpdate(tableId, orderStatus === OrderStatus.COMPLETED ? TableStatus.ACTIVE : TableStatus.OCCUPIED, orderIdStr);
 };
 

@@ -24,8 +24,20 @@ qrController.getMenu = async (req: Request, res: Response) => {
         // Get table info
         const table = await tableService.getTableById(tableId);
 
-        // Check if table is available or has active order
-        const activeOrder = await orderService.getOrderByTable(tableId);
+        // Check if table is available for orders
+        const isAvailable = await tableService.checkTableAvailabilityForOrder(tableId);
+        if (!isAvailable) {
+            throw new Errors(
+                HttpCode.FORBIDDEN,
+                "This table is not available now, please set another table"
+            );
+        }
+
+        // Get all active orders for this table
+        const activeOrders = await orderService.getActiveOrdersByTableWithDetails(tableId);
+
+        // Get all orders history for this table (including completed)
+        const orderHistory = await orderService.getAllOrdersByTable(tableId);
 
         // Get menu products for restaurant
         const inquiry: ProductInquiry = {
@@ -36,18 +48,30 @@ qrController.getMenu = async (req: Request, res: Response) => {
 
         const products = await productService.getProducts(inquiry);
 
-        // Return menu with table info
+        // Return menu with table info and order history
         res.status(HttpCode.OK).json({
             table: {
                 tableId: table._id,
                 tableNumber: table.tableNumber,
                 status: table.status,
-                hasActiveOrder: !!activeOrder,
-                activeOrder: activeOrder ? {
-                    orderId: activeOrder._id,
-                    orderNumber: activeOrder.orderNumber,
-                    orderStatus: activeOrder.orderStatus,
-                } : null,
+                hasActiveOrders: activeOrders.length > 0,
+                activeOrders: activeOrders.map(order => ({
+                    orderId: order._id,
+                    orderNumber: order.orderNumber,
+                    orderStatus: order.orderStatus,
+                    paymentStatus: order.paymentStatus,
+                    orderTotal: order.orderTotal,
+                    createdAt: order.createdAt,
+                })),
+                orderHistory: orderHistory.map(order => ({
+                    orderId: order._id,
+                    orderNumber: order.orderNumber,
+                    orderStatus: order.orderStatus,
+                    paymentStatus: order.paymentStatus,
+                    orderTotal: order.orderTotal,
+                    createdAt: order.createdAt,
+                    completedAt: order.completedAt,
+                })),
             },
             restaurant: {
                 restaurantId: table.restaurantId,
@@ -68,6 +92,16 @@ qrController.getMenu = async (req: Request, res: Response) => {
 qrController.createOrder = async (req: Request, res: Response) => {
     try {
         const { tableId } = req.params;
+
+        // Check if table is available for orders
+        const isAvailable = await tableService.checkTableAvailabilityForOrder(tableId);
+        if (!isAvailable) {
+            throw new Errors(
+                HttpCode.FORBIDDEN,
+                "This table is not available now, please set another table"
+            );
+        }
+
         const input: OrderCreateInput = {
             tableId: tableId,
             items: req.body.items || [],
@@ -80,12 +114,12 @@ qrController.createOrder = async (req: Request, res: Response) => {
             throw new Errors(HttpCode.BAD_REQUEST, Errors.standard.message);
         }
 
-        // If customer explicitly says "no" (not adding to existing when asked)
+        // If customer says "no" to existing order, they want a new separate order
+        // Set isAddingToExisting to false and don't send existingOrderId to create new order
         if (input.existingOrderId && !input.isAddingToExisting) {
-            return res.status(HttpCode.BAD_REQUEST).json({
-                error: true,
-                message: "Please ask staff to complete table order",
-            });
+            // Customer wants new order, not adding to existing
+            input.existingOrderId = undefined;
+            input.isAddingToExisting = false;
         }
 
         const result = await orderService.createQROrder(input);

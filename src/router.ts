@@ -121,6 +121,12 @@ router.get(
     verifyServiceStaff,
     serviceController.getTables
 );
+router.get(
+    "/staff/service/table/:tableId/history",
+    memberController.verifyAuth,
+    verifyServiceStaff,
+    serviceController.getTableWithHistory
+);
 
 /* Owner/Admin Routes (JWT + OWNER role) */
 router.get(
