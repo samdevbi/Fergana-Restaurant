@@ -11,7 +11,6 @@ import adminController from "./controllers/admin.controller";
 import { verifyKitchenStaff, verifyServiceStaff, verifyOwner } from "./libs/rbac/role.middleware";
 
 /* Member */
-router.get("/member/restaurant", memberController.getRestaurant)
 router.post("/member/signup", memberController.signup);
 router.post("/member/login", memberController.login);
 router.post(
@@ -31,8 +30,6 @@ router.post(
     makeUploader("members").single("memberImage"),
     memberController.updateMember
 );
-
-router.get("/member/top-users", memberController.getTopUsers);
 
 
 
