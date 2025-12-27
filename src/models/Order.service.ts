@@ -80,6 +80,60 @@ class OrderService {
     await Promise.all(promisedlist);
   }
 
+  /**
+   * Generate daily order number for restaurant
+   * Format: ORD-{dailyCount}
+   * Example: ORD-1, ORD-2, ORD-3, etc.
+   * Resets to 1 each new day
+   * Handles race conditions with retry mechanism
+   */
+  private async generateDailyOrderNumber(restaurantId: ObjectId | string, maxRetries: number = 5): Promise<string> {
+    const id = shapeIntoMongooseObjectId(restaurantId);
+
+    // Get today's date range
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      // Count orders created today for this restaurant
+      const todayOrdersCount = await this.orderModel.countDocuments({
+        restaurantId: id,
+        createdAt: {
+          $gte: today,
+          $lt: tomorrow,
+        },
+      }).exec();
+
+      // Next order number is count + 1
+      const dailyOrderNumber = todayOrdersCount + 1;
+
+      // Format: ORD-{number}
+      const orderNumber = `ORD-${dailyOrderNumber}`;
+
+      // Check if this order number already exists for today (race condition check)
+      const existingOrder = await this.orderModel.findOne({
+        orderNumber,
+        restaurantId: id,
+        createdAt: {
+          $gte: today,
+          $lt: tomorrow,
+        },
+      }).exec();
+
+      if (!existingOrder) {
+        return orderNumber;
+      }
+
+      // If order number exists, wait a bit and retry
+      await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
+    }
+
+    // If all retries failed, use timestamp as fallback
+    return `ORD-${Date.now()}`;
+  }
+
   public async getMyOrders(
     member: Member,
     inquery: OrderInquiry
@@ -225,8 +279,8 @@ class OrderService {
     }, 0);
     const delivery = 0; // No delivery fee for dine-in QR orders
 
-    // Generate order number
-    const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    // Generate daily order number
+    const orderNumber = await this.generateDailyOrderNumber(restaurantId);
 
     try {
       const newOrder: Order = await this.orderModel.create({
@@ -262,6 +316,18 @@ class OrderService {
         orderNumber: fullOrder.orderNumber,
         orderStatus: fullOrder.orderStatus,
       });
+
+      // Notify service staff and owner about new order
+      notifyServiceStaff(restaurantId.toString(), "order:new", {
+        orderId: orderId.toString(),
+        orderNumber: fullOrder.orderNumber,
+        tableNumber: fullOrder.tableNumber,
+        orderStatus: fullOrder.orderStatus,
+        paymentStatus: fullOrder.paymentStatus,
+        orderTotal: fullOrder.orderTotal,
+        items: fullOrder.orderItems,
+      });
+
       notifyServiceStaff(restaurantId.toString(), "payment:needs-verification", fullOrder);
       emitTableUpdate(tableId, TableStatus.OCCUPIED, orderId);
 
@@ -363,6 +429,15 @@ class OrderService {
       orderStatus: OrderStatus.COMPLETED,
     });
 
+    // Notify staff and owner about order completion
+    emitOrderStatusChange(
+      id,
+      OrderStatus.COMPLETED,
+      order.paymentStatus,
+      order.restaurantId,
+      order.tableId
+    );
+
     return result;
   }
 
@@ -411,6 +486,24 @@ class OrderService {
     // Emit WebSocket events
     notifyCustomer(id, "order:cancelled", {
       orderId: id,
+      orderStatus: OrderStatus.CANCELLED,
+      reason: input.reason,
+    });
+
+    // Notify staff and owner about order cancellation
+    emitOrderStatusChange(
+      id,
+      OrderStatus.CANCELLED,
+      order.paymentStatus,
+      order.restaurantId,
+      order.tableId
+    );
+
+    // Also send specific cancellation notification
+    notifyServiceStaff(order.restaurantId, "order:cancelled", {
+      orderId: id,
+      orderNumber: order.orderNumber,
+      tableNumber: order.tableNumber,
       orderStatus: OrderStatus.CANCELLED,
       reason: input.reason,
     });
@@ -466,6 +559,15 @@ class OrderService {
       items: input.items,
     });
 
+    // Notify staff and owner about order modification
+    notifyServiceStaff(order.restaurantId, "order:modified", {
+      orderId: id,
+      orderNumber: order.orderNumber,
+      tableNumber: order.tableNumber,
+      items: input.items,
+      newTotal: result.orderTotal,
+    });
+
     return result;
   }
 
@@ -509,10 +611,11 @@ class OrderService {
     return result;
   }
 
-  public async getServiceOrders(restaurantId: ObjectId | string): Promise<Order[]> {
+  public async getServiceOrders(restaurantId: ObjectId | string): Promise<any[]> {
     const id = shapeIntoMongooseObjectId(restaurantId);
 
-    const result = await this.orderModel
+    // Get all individual orders
+    const orders = await this.orderModel
       .aggregate([
         {
           $match: {
@@ -543,9 +646,63 @@ class OrderService {
       ])
       .exec();
 
-    if (!result) {
-      throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
+    if (!orders || orders.length === 0) {
+      return [];
     }
+
+    // Group orders by tableId
+    const groupedByTable: { [key: string]: any } = {};
+
+    orders.forEach((order: any) => {
+      const tableId = order.tableId.toString();
+
+      if (!groupedByTable[tableId]) {
+        // First order for this table - create grouped order
+        groupedByTable[tableId] = {
+          _id: order.tableId, // Use tableId as identifier
+          tableId: order.tableId,
+          tableNumber: order.tableNumber,
+          restaurantId: order.restaurantId,
+          // Combine all orders from this table
+          orders: [order],
+          // Combined totals
+          totalOrders: 1,
+          combinedTotal: order.orderTotal,
+          // Status info
+          hasPendingPayment: order.paymentStatus === PaymentStatus.PENDING,
+          hasReadyOrders: order.orderStatus === OrderStatus.READY,
+          // Timestamps
+          firstOrderAt: order.createdAt,
+          lastOrderAt: order.updatedAt,
+        };
+      } else {
+        // Add this order to existing table group
+        groupedByTable[tableId].orders.push(order);
+        groupedByTable[tableId].totalOrders += 1;
+        groupedByTable[tableId].combinedTotal += order.orderTotal;
+
+        // Update flags
+        if (order.paymentStatus === PaymentStatus.PENDING) {
+          groupedByTable[tableId].hasPendingPayment = true;
+        }
+        if (order.orderStatus === OrderStatus.READY) {
+          groupedByTable[tableId].hasReadyOrders = true;
+        }
+
+        // Update timestamps
+        if (order.createdAt < groupedByTable[tableId].firstOrderAt) {
+          groupedByTable[tableId].firstOrderAt = order.createdAt;
+        }
+        if (order.updatedAt > groupedByTable[tableId].lastOrderAt) {
+          groupedByTable[tableId].lastOrderAt = order.updatedAt;
+        }
+      }
+    });
+
+    // Convert to array and sort by first order time
+    const result = Object.values(groupedByTable).sort((a: any, b: any) => {
+      return a.firstOrderAt - b.firstOrderAt;
+    });
 
     return result;
   }

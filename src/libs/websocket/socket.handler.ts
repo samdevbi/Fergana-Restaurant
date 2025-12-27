@@ -164,6 +164,7 @@ export const emitOrderStatusChange = (
     if (!io) return;
 
     const orderIdStr = orderId.toString();
+    const restaurantIdStr = restaurantId.toString();
     const data = {
         orderId: orderIdStr,
         orderStatus: orderStatus,
@@ -178,10 +179,11 @@ export const emitOrderStatusChange = (
         notifyKitchen(restaurantId, { ...data, _id: orderIdStr });
     }
 
-    // Notify service staff
-    if (orderStatus === OrderStatus.PENDING || orderStatus === OrderStatus.READY) {
-        notifyServiceStaff(restaurantId, "order:needs-attention", data);
-    }
+    // Notify service staff and owner for all status changes
+    notifyServiceStaff(restaurantId, "order:status-changed", data);
+
+    // Also broadcast to restaurant room (owner and all staff can see)
+    io.to(`restaurant:${restaurantIdStr}`).emit("order:status-changed", data);
 
     // Notify table room
     emitTableUpdate(tableId, orderStatus === OrderStatus.COMPLETED ? TableStatus.ACTIVE : TableStatus.OCCUPIED, orderIdStr);

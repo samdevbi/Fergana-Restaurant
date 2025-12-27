@@ -6,7 +6,6 @@ const orderSchema = new Schema(
         orderNumber: {
             type: String,
             required: true,
-            unique: true,
             index: true,
         },
 
@@ -106,5 +105,7 @@ orderSchema.index({ tableId: 1, orderStatus: 1 });
 orderSchema.index({ restaurantId: 1, orderStatus: 1, createdAt: -1 });
 orderSchema.index({ paymentStatus: 1, orderStatus: 1 });
 orderSchema.index({ createdAt: -1 });
+// Index for orderNumber (not unique - allows daily reset with same numbers)
+orderSchema.index({ restaurantId: 1, orderNumber: 1 });
 
 export default mongoose.model("Order", orderSchema);
