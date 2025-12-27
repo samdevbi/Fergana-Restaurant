@@ -6,7 +6,6 @@ import ProductService from "../models/Product.service";
 import OrderService from "../models/Order.service";
 import { OrderCreateInput } from "../libs/types/order";
 import { ProductInquiry } from "../libs/types/product";
-import { ProductStatus } from "../libs/enums/product.enum";
 
 const tableService = new TableService();
 const productService = new ProductService();
@@ -20,7 +19,6 @@ const qrController: T = {};
  */
 qrController.getMenu = async (req: Request, res: Response) => {
     try {
-        console.log("getMenu");
         const { tableId } = req.params;
 
         // Get table info
@@ -69,7 +67,6 @@ qrController.getMenu = async (req: Request, res: Response) => {
  */
 qrController.createOrder = async (req: Request, res: Response) => {
     try {
-        console.log("createOrder");
         const { tableId } = req.params;
         const input: OrderCreateInput = {
             tableId: tableId,
@@ -105,7 +102,6 @@ qrController.createOrder = async (req: Request, res: Response) => {
  */
 qrController.getOrderStatus = async (req: Request, res: Response) => {
     try {
-        console.log("getOrderStatus");
         const { orderId } = req.params;
 
         const result = await orderService.getOrderStatus(orderId);
@@ -124,7 +120,6 @@ qrController.getOrderStatus = async (req: Request, res: Response) => {
  */
 qrController.getOrderDetails = async (req: Request, res: Response) => {
     try {
-        console.log("getOrderDetails");
         const { orderId } = req.params;
 
         const result = await orderService.getOrderById(orderId);

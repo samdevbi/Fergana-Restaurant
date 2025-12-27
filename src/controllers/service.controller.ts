@@ -24,8 +24,6 @@ const serviceController: T = {};
  */
 serviceController.getOrders = async (req: ExtendedRequest, res: Response) => {
     try {
-        console.log("getServiceOrders");
-        
         // Get restaurant owner (restaurantId)
         const restaurant = await memberService.getRestaurant();
         const restaurantId = restaurant._id;
@@ -49,7 +47,6 @@ serviceController.getOrders = async (req: ExtendedRequest, res: Response) => {
  */
 serviceController.verifyPayment = async (req: ExtendedRequest, res: Response) => {
     try {
-        console.log("verifyPayment");
         const { id } = req.params;
         const input: PaymentVerificationInput = {
             orderId: id,
@@ -81,7 +78,6 @@ serviceController.verifyPayment = async (req: ExtendedRequest, res: Response) =>
  */
 serviceController.completeOrder = async (req: ExtendedRequest, res: Response) => {
     try {
-        console.log("completeOrder");
         const { id } = req.params;
         const input: OrderCompleteInput = {
             orderId: id,
@@ -106,7 +102,6 @@ serviceController.completeOrder = async (req: ExtendedRequest, res: Response) =>
  */
 serviceController.cancelOrder = async (req: ExtendedRequest, res: Response) => {
     try {
-        console.log("cancelOrder");
         const { id } = req.params;
         const input: OrderCancelInput = {
             orderId: id,
@@ -133,7 +128,6 @@ serviceController.cancelOrder = async (req: ExtendedRequest, res: Response) => {
  */
 serviceController.modifyOrderItems = async (req: ExtendedRequest, res: Response) => {
     try {
-        console.log("modifyOrderItems");
         const { id } = req.params;
         const input: OrderModifyItemsInput = {
             orderId: id,
@@ -164,7 +158,6 @@ serviceController.modifyOrderItems = async (req: ExtendedRequest, res: Response)
  */
 serviceController.getOrder = async (req: ExtendedRequest, res: Response) => {
     try {
-        console.log("getServiceOrder");
         const { id } = req.params;
 
         const result = await orderService.getOrderById(id);
@@ -183,8 +176,6 @@ serviceController.getOrder = async (req: ExtendedRequest, res: Response) => {
  */
 serviceController.getTables = async (req: ExtendedRequest, res: Response) => {
     try {
-        console.log("getServiceTables");
-        
         // Get restaurant owner (restaurantId)
         const restaurant = await memberService.getRestaurant();
         const restaurantId = restaurant._id;
@@ -203,4 +194,5 @@ serviceController.getTables = async (req: ExtendedRequest, res: Response) => {
 };
 
 export default serviceController;
+
 

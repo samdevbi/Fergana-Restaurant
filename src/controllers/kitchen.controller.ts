@@ -16,8 +16,6 @@ const kitchenController: T = {};
  */
 kitchenController.getOrders = async (req: ExtendedRequest, res: Response) => {
     try {
-        console.log("getKitchenOrders");
-        
         // Get restaurant owner (restaurantId)
         // For now, get the restaurant owner member
         // TODO: Update when Member schema has restaurantId field for staff
@@ -43,7 +41,6 @@ kitchenController.getOrders = async (req: ExtendedRequest, res: Response) => {
  */
 kitchenController.getOrder = async (req: ExtendedRequest, res: Response) => {
     try {
-        console.log("getKitchenOrder");
         const { id } = req.params;
 
         const result = await orderService.getOrderById(id);

@@ -59,7 +59,6 @@ class OrderService {
         memberId: memberId,
       });
       const orderId = newOrder._id;
-      console.log("orderId:", newOrder._id);
       await this.recordOrderItem(orderId, input);
 
       return newOrder;
@@ -77,11 +76,7 @@ class OrderService {
       return "INSERTED";
     });
 
-    console.log("promisedList:", promisedlist);
-    const orderItemState = await Promise.all(promisedlist);
-    console.log("orderItemState:", orderItemState);
-
-
+    await Promise.all(promisedlist);
   }
 
   public async getMyOrders(
@@ -141,11 +136,6 @@ class OrderService {
     ).exec();
 
     if (!result) throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
-
-    // Legacy point system (can be removed if not using)
-    // if(orderStatus === OrderStatus.CONFIRMED) {
-    //     await this.memberService.addUserPoint(member, 1);
-    // }
 
     return result;
   }
@@ -251,16 +241,14 @@ class OrderService {
     }
 
     // Emit WebSocket events
-    if (order) {
-      emitOrderStatusChange(
-        id,
-        OrderStatus.CONFIRMED,
-        PaymentStatus.VERIFIED,
-        order.restaurantId,
-        order.tableId
-      );
-      notifyKitchen(order.restaurantId, result);
-    }
+    emitOrderStatusChange(
+      id,
+      OrderStatus.CONFIRMED,
+      PaymentStatus.VERIFIED,
+      order.restaurantId,
+      order.tableId
+    );
+    notifyKitchen(order.restaurantId, result);
 
     return result;
   }

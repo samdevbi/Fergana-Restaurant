@@ -28,12 +28,8 @@ class AuthService {
             token,
             this.secretToken
         )) as Member;
-        console.log(`------[AUTH] memberName: ${result.memberName} ------`);
         return result;
-
     }
 }
-
-
 
 export default AuthService;

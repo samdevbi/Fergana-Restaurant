@@ -40,40 +40,22 @@ router.get("/member/top-users", memberController.getTopUsers);
 router.post(
     "/product/createProduct",
     memberController.verifyAuth,
+    verifyOwner,
     productController.createNewProduct
 );
 
 router.get(
     "/product/getAllProducts",
+    memberController.verifyAuth,
+    verifyOwner,
     productController.getProducts
 );
 
 router.get(
     "/product/:id",
-    memberController.retrieveAuth,
+    memberController.verifyAuth,
+    verifyOwner,
     productController.getProduct
-);
-
-
-
-/* Order */
-
-router.post(
-    "/order/createOrder",
-    memberController.verifyAuth,
-    orderController.createOrder
-);
-
-router.get(
-    "/order/getAllMyOrders",
-    memberController.verifyAuth,
-    orderController.getMyOrders
-);
-
-router.post(
-    "/order/updateOrder",
-    memberController.verifyAuth,
-    orderController.updateOrder
 );
 
 /* QR Customer Routes (Public - No Authentication) */

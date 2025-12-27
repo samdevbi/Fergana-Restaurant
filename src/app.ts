@@ -1,5 +1,4 @@
 import express from "express";
-import path from 'path';
 import router from "./router";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
