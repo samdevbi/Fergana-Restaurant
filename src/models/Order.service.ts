@@ -8,6 +8,7 @@ import {
   OrderCompleteInput,
   OrderCancelInput,
   OrderModifyItemsInput,
+  OrderConfirmationResponse,
 } from "../libs/types/order";
 import { Member } from "../libs/types/member";
 import OrderModel from "../schema/Order.model";
@@ -142,18 +143,79 @@ class OrderService {
 
   // QR Order Methods
 
-  public async createQROrder(input: OrderCreateInput): Promise<Order> {
+  public async createQROrder(input: OrderCreateInput): Promise<Order | OrderConfirmationResponse> {
     const tableId = shapeIntoMongooseObjectId(input.tableId);
-
-    // Check table availability
-    const isAvailable = await this.tableService.checkTableAvailability(tableId);
-    if (!isAvailable) {
-      throw new Errors(HttpCode.BAD_REQUEST, Message.UPDATE_FAILED);
-    }
 
     // Get table info
     const table = await this.tableService.getTableById(tableId);
     const restaurantId = table.restaurantId;
+
+    // Check if there's an existing active order on this table
+    const existingOrder = await this.getOrderByTable(tableId);
+
+    // If adding to existing order
+    if (input.isAddingToExisting && input.existingOrderId) {
+      const existingOrderId = shapeIntoMongooseObjectId(input.existingOrderId);
+      const order = await this.orderModel.findById(existingOrderId).exec();
+      
+      if (!order || order.tableId.toString() !== tableId.toString()) {
+        throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
+      }
+
+      // Add items to existing order
+      await this.recordOrderItem(existingOrderId, input.items);
+
+      // Recalculate total
+      const existingItems = await this.orderItemModel.find({ orderId: existingOrderId }).exec();
+      const newAmount = existingItems.reduce((sum, item) => sum + item.itemPrice * item.itemQuantity, 0);
+
+      const updatedOrder = await this.orderModel.findByIdAndUpdate(
+        existingOrderId,
+        { orderTotal: newAmount },
+        { new: true }
+      ).exec();
+
+      const fullOrder = await this.getOrderById(existingOrderId.toString());
+
+      // Emit WebSocket events
+      // Notify customer
+      emitOrderUpdate(existingOrderId.toString(), "order:item-added", {
+        orderId: existingOrderId.toString(),
+        newItems: input.items,
+      });
+
+      // Notify kitchen if order is confirmed or preparing
+      if (order.orderStatus === OrderStatus.CONFIRMED || order.orderStatus === OrderStatus.PREPARING) {
+        notifyKitchen(order.restaurantId, {
+          _id: existingOrderId.toString(),
+          orderNumber: fullOrder.orderNumber,
+          tableNumber: fullOrder.tableNumber,
+          newItems: input.items,
+          updatedOrder: fullOrder,
+          event: "order:items-added",
+        });
+      }
+
+      // Notify service staff
+      notifyServiceStaff(order.restaurantId, "order:items-added", {
+        orderId: existingOrderId.toString(),
+        orderNumber: fullOrder.orderNumber,
+        tableNumber: fullOrder.tableNumber,
+        newItems: input.items,
+        updatedTotal: fullOrder.orderTotal,
+      });
+
+      return fullOrder;
+    }
+
+    // If table has active order and customer didn't confirm, ask for confirmation
+    if (existingOrder && !input.isAddingToExisting) {
+      const existingOrderDetails = await this.getOrderById(existingOrder._id.toString());
+      return {
+        needsConfirmation: true,
+        existingOrder: existingOrderDetails,
+      };
+    }
 
     // Calculate order total
     const amount = input.items.reduce((accumulator: number, item: OrderItemInput) => {
@@ -183,8 +245,10 @@ class OrderService {
       // Record order items
       await this.recordOrderItem(orderId, input.items);
 
-      // Lock table
-      await this.tableService.occupyTable(tableId, orderId);
+      // Update table status (allow multiple orders, just mark as occupied if first order)
+      if (!existingOrder) {
+        await this.tableService.occupyTable(tableId, orderId);
+      }
 
       // Get full order with items
       const fullOrder = await this.getOrderById(orderId.toString());
@@ -483,6 +547,23 @@ class OrderService {
           $nin: [OrderStatus.COMPLETED, OrderStatus.CANCELLED]
         }
       })
+      .sort({ createdAt: -1 }) // Get most recent order
+      .exec();
+
+    return result;
+  }
+
+  public async getActiveOrdersByTable(tableId: ObjectId | string): Promise<Order[]> {
+    const id = shapeIntoMongooseObjectId(tableId);
+
+    const result = await this.orderModel
+      .find({
+        tableId: id,
+        orderStatus: {
+          $nin: [OrderStatus.COMPLETED, OrderStatus.CANCELLED]
+        }
+      })
+      .sort({ createdAt: -1 })
       .exec();
 
     return result;

@@ -47,6 +47,13 @@ export interface OrderItemInput {
 export interface OrderCreateInput {
     tableId: string;
     items: OrderItemInput[];
+    existingOrderId?: string;
+    isAddingToExisting?: boolean;
+}
+
+export interface OrderConfirmationResponse {
+    needsConfirmation: boolean;
+    existingOrder: Order;
 }
 
 export interface OrderInquiry {

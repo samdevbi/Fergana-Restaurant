@@ -88,27 +88,20 @@ class TableService {
             throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
         }
 
-        return table.status === TableStatus.AVAILABLE && !table.currentOrderId;
+        // Allow multiple orders - table is available if it exists
+        return true;
     }
 
     public async occupyTable(tableId: ObjectId | string, orderId: ObjectId | string): Promise<Table> {
         const tableIdObj = shapeIntoMongooseObjectId(tableId);
         const orderIdObj = shapeIntoMongooseObjectId(orderId);
 
-        // Check if table is available
-        const isAvailable = await this.checkTableAvailability(tableIdObj);
-        if (!isAvailable) {
-            throw new Errors(HttpCode.BAD_REQUEST, Message.UPDATE_FAILED);
-        }
-
-        const result = await this.tableModel.findOneAndUpdate(
-            {
-                _id: tableIdObj,
-                status: TableStatus.AVAILABLE,
-            },
+        // Update table to occupied (allow multiple orders, just mark as occupied)
+        const result = await this.tableModel.findByIdAndUpdate(
+            tableIdObj,
             {
                 status: TableStatus.OCCUPIED,
-                currentOrderId: orderIdObj,
+                currentOrderId: orderIdObj, // Keep reference to first order
             },
             { new: true }
         ).exec();

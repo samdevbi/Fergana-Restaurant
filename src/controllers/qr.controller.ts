@@ -4,7 +4,7 @@ import Errors, { HttpCode } from "../libs/Errors";
 import TableService from "../models/Table.service";
 import ProductService from "../models/Product.service";
 import OrderService from "../models/Order.service";
-import { OrderCreateInput } from "../libs/types/order";
+import { OrderCreateInput, Order } from "../libs/types/order";
 import { ProductInquiry } from "../libs/types/product";
 
 const tableService = new TableService();
@@ -71,6 +71,8 @@ qrController.createOrder = async (req: Request, res: Response) => {
         const input: OrderCreateInput = {
             tableId: tableId,
             items: req.body.items || [],
+            existingOrderId: req.body.existingOrderId,
+            isAddingToExisting: req.body.isAddingToExisting || false,
         };
 
         // Validate items
@@ -78,16 +80,41 @@ qrController.createOrder = async (req: Request, res: Response) => {
             throw new Errors(HttpCode.BAD_REQUEST, Errors.standard.message);
         }
 
+        // If customer explicitly says "no" (not adding to existing when asked)
+        if (input.existingOrderId && !input.isAddingToExisting) {
+            return res.status(HttpCode.BAD_REQUEST).json({
+                error: true,
+                message: "Please ask staff to complete table order",
+            });
+        }
+
         const result = await orderService.createQROrder(input);
 
+        // Check if confirmation is needed
+        if (result && 'needsConfirmation' in result && result.needsConfirmation) {
+            return res.status(HttpCode.OK).json({
+                needsConfirmation: true,
+                message: "Is this your order?",
+                existingOrder: {
+                    orderId: result.existingOrder._id,
+                    orderNumber: result.existingOrder.orderNumber,
+                    orderStatus: result.existingOrder.orderStatus,
+                    orderTotal: result.existingOrder.orderTotal,
+                    items: result.existingOrder.orderItems,
+                },
+            });
+        }
+
+        // Normal order creation or adding to existing
+        const order = result as Order;
         res.status(HttpCode.CREATED).json({
-            orderId: result._id,
-            orderNumber: result.orderNumber,
-            orderTotal: result.orderTotal,
-            orderStatus: result.orderStatus,
-            paymentStatus: result.paymentStatus,
-            tableNumber: result.tableNumber,
-            items: result.orderItems,
+            orderId: order._id,
+            orderNumber: order.orderNumber,
+            orderTotal: order.orderTotal,
+            orderStatus: order.orderStatus,
+            paymentStatus: order.paymentStatus,
+            tableNumber: order.tableNumber,
+            items: order.orderItems,
         });
     } catch (err) {
         console.log("Error, createOrder:", err);
