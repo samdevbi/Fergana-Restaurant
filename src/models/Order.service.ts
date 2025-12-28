@@ -271,8 +271,20 @@ class OrderService {
 
     // If table has active order and customer didn't confirm, ask for confirmation
     // But allow creating new order if customer wants separate order
-    if (existingOrder && !input.isAddingToExisting && !input.existingOrderId) {
+    // Skip confirmation if customer has given permission
+    if (existingOrder && !input.isAddingToExisting && !input.existingOrderId && !input.hasPermission) {
       const existingOrderDetails = await this.getOrderById(existingOrder._id.toString());
+
+      // If table is not ACTIVE, ask for permission
+      if (table.status !== TableStatus.ACTIVE) {
+        return {
+          needsConfirmation: true,
+          needsPermission: true,
+          message: "This table has existing orders. Do you want to create a new order on this table?",
+          existingOrder: existingOrderDetails,
+        };
+      }
+
       return {
         needsConfirmation: true,
         existingOrder: existingOrderDetails,

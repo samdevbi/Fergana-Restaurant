@@ -49,11 +49,14 @@ export interface OrderCreateInput {
     items: OrderItemInput[];
     existingOrderId?: string;
     isAddingToExisting?: boolean;
+    hasPermission?: boolean; // Permission to create order on non-ACTIVE table
 }
 
 export interface OrderConfirmationResponse {
     needsConfirmation: boolean;
-    existingOrder: Order;
+    existingOrder?: Order;
+    needsPermission?: boolean;
+    message?: string;
 }
 
 export interface OrderInquiry {

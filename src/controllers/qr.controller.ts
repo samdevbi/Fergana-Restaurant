@@ -93,9 +93,34 @@ qrController.createOrder = async (req: Request, res: Response) => {
     try {
         const { tableId } = req.params;
 
+        // Get table info to check status
+        const table = await tableService.getTableById(tableId);
+        
         // Check if table is available for orders
         const isAvailable = await tableService.checkTableAvailabilityForOrder(tableId);
-        if (!isAvailable) {
+        
+        // Check if there's an existing order on this table
+        const existingOrder = await orderService.getOrderByTable(tableId);
+        
+        // If table is not ACTIVE but has existing orders, ask for permission
+        if (!isAvailable && existingOrder && !req.body.hasPermission) {
+            const existingOrderDetails = await orderService.getOrderById(existingOrder._id.toString());
+            return res.status(HttpCode.OK).json({
+                needsPermission: true,
+                needsConfirmation: true,
+                message: "This table has existing orders. Do you want to create a new order on this table?",
+                existingOrder: {
+                    orderId: existingOrderDetails._id,
+                    orderNumber: existingOrderDetails.orderNumber,
+                    orderStatus: existingOrderDetails.orderStatus,
+                    orderTotal: existingOrderDetails.orderTotal,
+                    items: existingOrderDetails.orderItems,
+                },
+            });
+        }
+        
+        // If table is not ACTIVE and no permission given, reject
+        if (!isAvailable && !req.body.hasPermission) {
             throw new Errors(
                 HttpCode.FORBIDDEN,
                 Message.TABLE_NOT_AVAILABLE
@@ -107,6 +132,7 @@ qrController.createOrder = async (req: Request, res: Response) => {
             items: req.body.items || [],
             existingOrderId: req.body.existingOrderId,
             isAddingToExisting: req.body.isAddingToExisting || false,
+            hasPermission: req.body.hasPermission || false,
         };
 
         // Validate items
@@ -126,17 +152,32 @@ qrController.createOrder = async (req: Request, res: Response) => {
 
         // Check if confirmation is needed
         if (result && 'needsConfirmation' in result && result.needsConfirmation) {
-            return res.status(HttpCode.OK).json({
-                needsConfirmation: true,
-                message: "Is this your order?",
-                existingOrder: {
-                    orderId: result.existingOrder._id,
-                    orderNumber: result.existingOrder.orderNumber,
-                    orderStatus: result.existingOrder.orderStatus,
-                    orderTotal: result.existingOrder.orderTotal,
-                    items: result.existingOrder.orderItems,
-                },
-            });
+            if (result.needsPermission) {
+                return res.status(HttpCode.OK).json({
+                    needsPermission: true,
+                    needsConfirmation: true,
+                    message: result.message || "This table has existing orders. Do you want to create a new order on this table?",
+                    existingOrder: result.existingOrder ? {
+                        orderId: result.existingOrder._id,
+                        orderNumber: result.existingOrder.orderNumber,
+                        orderStatus: result.existingOrder.orderStatus,
+                        orderTotal: result.existingOrder.orderTotal,
+                        items: result.existingOrder.orderItems,
+                    } : undefined,
+                });
+            } else {
+                return res.status(HttpCode.OK).json({
+                    needsConfirmation: true,
+                    message: "Is this your order?",
+                    existingOrder: result.existingOrder ? {
+                        orderId: result.existingOrder._id,
+                        orderNumber: result.existingOrder.orderNumber,
+                        orderStatus: result.existingOrder.orderStatus,
+                        orderTotal: result.existingOrder.orderTotal,
+                        items: result.existingOrder.orderItems,
+                    } : undefined,
+                });
+            }
         }
 
         // Normal order creation or adding to existing
