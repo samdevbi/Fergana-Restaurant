@@ -14,7 +14,8 @@ services:
           property: port
     # Add your environment variables in Render dashboard:
     # - MONGO_URL (your MongoDB Atlas connection string)
-    # - FRONTEND_URL (or CLIENT_URL) - your frontend URL
+    # - FRONTEND_URL (dashboard URL - for staff/owner/admin)
+    # - CLIENT_URL (client URL - for customers/QR code users)
     # - SECRET_TOKEN (JWT secret - generate with: openssl rand -base64 32)
     # - AUTH_TIMER (optional, defaults to 24)
 

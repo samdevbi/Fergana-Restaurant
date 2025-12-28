@@ -42,9 +42,9 @@ class TableService {
                 status: TableStatus.ACTIVE,
             });
 
-            // Generate QR code image file
+            // Generate QR code image file (use CLIENT_URL for customer-facing QR codes)
             try {
-                const baseUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+                const baseUrl = process.env.CLIENT_URL || process.env.FRONTEND_URL || "http://localhost:3000";
                 const qrCodeUrl = await generateQRCodeFile(
                     result._id.toString(),
                     restaurantId.toString(),
