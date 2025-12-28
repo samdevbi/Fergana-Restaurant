@@ -17,10 +17,13 @@ productController.getProducts = async (req: Request, res: Response) => {
     try {
         console.log("getProducts");
         const { page, limit, order, productCollection, search } = req.query;
+        const pageNum = Number(page);
+        const limitNum = Number(limit);
+        
         const inquiry: ProductInquiry = {
-            order: String(order),
-            page: Number(page),
-            limit: Number(limit),
+            order: String(order) || "createdAt",
+            page: (pageNum && pageNum > 0) ? pageNum : 1,
+            limit: (limitNum && limitNum > 0) ? limitNum : 10,
         };
         if (productCollection) {
             inquiry.productCollection = productCollection as ProductCollection;
