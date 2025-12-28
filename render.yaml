@@ -13,8 +13,8 @@ services:
           name: fergana-backend
           property: port
     # Add your environment variables in Render dashboard:
-    # - MONGO_URL
-    # - FRONTEND_URL (or CLIENT_URL)
-    # - SECRET_TOKEN
+    # - MONGO_URL (your MongoDB Atlas connection string)
+    # - FRONTEND_URL (or CLIENT_URL) - your frontend URL
+    # - SECRET_TOKEN (JWT secret - generate with: openssl rand -base64 32)
     # - AUTH_TIMER (optional, defaults to 24)
 

@@ -10,6 +10,15 @@ import serviceController from "./controllers/service.controller";
 import adminController from "./controllers/admin.controller";
 import { verifyKitchenStaff, verifyServiceStaff, verifyOwner } from "./libs/rbac/role.middleware";
 
+/* Health Check */
+router.get("/health", (req, res) => {
+    res.status(200).json({
+        status: "ok",
+        timestamp: new Date().toISOString(),
+        service: "Fergana Backend API"
+    });
+});
+
 /* Member */
 router.post("/member/signup", memberController.signup);
 router.post("/member/login", memberController.login);

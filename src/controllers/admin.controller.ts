@@ -8,7 +8,7 @@ import OrderService from "../models/Order.service";
 import ProductService from "../models/Product.service";
 import { TableInput, TableUpdateInput } from "../libs/types/table";
 import { MemberInput, MemberUpdateInput } from "../libs/types/member";
-import { MemberRole } from "../libs/enums/member.enum";
+import { MemberRole, MemberStatus } from "../libs/enums/member.enum";
 
 const tableService = new TableService();
 const memberService = new MemberService();
@@ -251,6 +251,7 @@ adminController.createStaff = async (req: ExtendedRequest, res: Response) => {
             memberName: req.body.memberName,
             memberPassword: req.body.memberPassword,
             memberRole: req.body.memberRole || MemberRole.STAFF,
+            memberStatus: MemberStatus.ACTIVE,
         };
 
         if (!input.memberName || !input.memberPassword) {
