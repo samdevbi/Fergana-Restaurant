@@ -38,6 +38,7 @@ router.post(
     "/product/createProduct",
     memberController.verifyAuth,
     verifyOwner,
+    makeUploader("products").single("productImage"),
     productController.createNewProduct
 );
 

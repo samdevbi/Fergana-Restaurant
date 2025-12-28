@@ -249,12 +249,11 @@ adminController.createStaff = async (req: ExtendedRequest, res: Response) => {
 
         const input: MemberInput = {
             memberName: req.body.memberName,
-            memberPhone: req.body.memberPhone,
             memberPassword: req.body.memberPassword,
             memberRole: req.body.memberRole || MemberRole.STAFF,
         };
 
-        if (!input.memberName || !input.memberPhone || !input.memberPassword) {
+        if (!input.memberName || !input.memberPassword) {
             throw new Errors(HttpCode.BAD_REQUEST, Errors.standard.message);
         }
 
@@ -285,7 +284,6 @@ adminController.updateStaff = async (req: ExtendedRequest, res: Response) => {
             _id: id as any,
             memberStatus: req.body.memberStatus,
             memberName: req.body.memberName,
-            memberPhone: req.body.memberPhone,
         };
 
         const result = await memberService.updateChosenUser(input);

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { T } from "../libs/types/common";
-import Errors, { HttpCode } from "../libs/Errors";
+import Errors, { HttpCode, Message } from "../libs/Errors";
 import TableService from "../models/Table.service";
 import ProductService from "../models/Product.service";
 import OrderService from "../models/Order.service";
@@ -29,7 +29,7 @@ qrController.getMenu = async (req: Request, res: Response) => {
         if (!isAvailable) {
             throw new Errors(
                 HttpCode.FORBIDDEN,
-                "This table is not available now, please set another table"
+                Message.TABLE_NOT_AVAILABLE
             );
         }
 
@@ -98,7 +98,7 @@ qrController.createOrder = async (req: Request, res: Response) => {
         if (!isAvailable) {
             throw new Errors(
                 HttpCode.FORBIDDEN,
-                "This table is not available now, please set another table"
+                Message.TABLE_NOT_AVAILABLE
             );
         }
 

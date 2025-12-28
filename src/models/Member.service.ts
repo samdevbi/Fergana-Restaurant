@@ -20,9 +20,6 @@ class MemberService {
         if (!input.memberName) {
             throw new Errors(HttpCode.BAD_REQUEST, Message.CREATE_FAILED);
         }
-        if (!input.memberPhone) {
-            throw new Errors(HttpCode.BAD_REQUEST, Message.CREATE_FAILED);
-        }
 
         const salt = await bcrypt.genSalt();
         input.memberPassword = await bcrypt.hash(input.memberPassword, salt);

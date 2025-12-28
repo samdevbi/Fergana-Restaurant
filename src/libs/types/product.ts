@@ -35,7 +35,7 @@ export interface ProductInput {
     productPrepTime?: number,
     productDesc?: string,
     productIngred?: [string],
-    productImage: string,
+    productImage?: string,
 }
 
 export interface ProductUpdateInput {

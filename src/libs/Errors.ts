@@ -22,18 +22,19 @@ export enum Message {
     WRONG_PASSWORD = "Wrong password, please, try again!",
     NOT_AUTHENTICATED = "You are not authenticated, Please login first",
     INSUFFICIENT_PERMISSIONS = "You don't have permission for this action",
+    TABLE_NOT_AVAILABLE = "This table is not available now, please set another table",
 }
 
 class Errors extends Error {
     public code: HttpCode;
-    public message: Message;
+    public message: Message | string;
 
     static standard = {
         code: HttpCode.INTERNAL_SERVER_ERROR,
         message: Message.SOMETHING_WENT_WRONG,
     }
 
-    constructor(statusCode: HttpCode, statusMessage: Message) {
+    constructor(statusCode: HttpCode, statusMessage: Message | string) {
         super();
         this.code = statusCode;
         this.message = statusMessage;
