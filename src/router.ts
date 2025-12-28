@@ -64,6 +64,12 @@ router.get(
     verifyOwner,
     productController.getProduct
 );
+router.put(
+    "/product/updateProduct/:id",
+    memberController.verifyAuth,
+    verifyOwner,
+    productController.updateChosenProduct
+);
 
 /* QR Customer Routes (Public - No Authentication) */
 router.get("/qr/:tableId/getMenu", qrController.getMenu);
