@@ -30,7 +30,7 @@ Fill in the form with these exact values:
 - **Region**: Choose closest to your users (e.g., `Oregon (US West)`)
 - **Branch**: `main` (or `master` if that's your branch)
 - **Root Directory**: Leave **empty** (`.`)
-- **Build Command**: `npm install && npm run build`
+- **Build Command**: `npm install --include=dev && npm run build`
 - **Start Command**: `npm start`
 
 #### 2.3 Choose Plan

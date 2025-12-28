@@ -1,7 +1,6 @@
-import express from "express";
+import express, { Request } from "express";
 import { ObjectId } from "mongoose";
 import { MemberStatus, MemberRole } from "../enums/member.enum";
-import { Request } from "express";
 import { Session } from "express-session";
 
 
@@ -41,18 +40,16 @@ export interface MemberUpdateInput {
     memberImage?: string;
 }
 
-export interface ExtendedRequest extends Request {
+export interface ExtendedRequest extends express.Request {
     member: Member;
-    file: Express.Multer.File;
-    files: Express.Multer.File[];
+    file?: Express.Multer.File;
+    files?: Express.Multer.File[];
 }
 
-
-
-export interface AdminRequest extends Request {
+export interface AdminRequest extends express.Request {
     member: Member;
     session: Session & { member: Member };
-    file: Express.Multer.File;
-    files: Express.Multer.File[];
+    file?: Express.Multer.File;
+    files?: Express.Multer.File[];
 }
 

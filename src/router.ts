@@ -11,7 +11,7 @@ import adminController from "./controllers/admin.controller";
 import { verifyKitchenStaff, verifyServiceStaff, verifyOwner } from "./libs/rbac/role.middleware";
 
 /* Health Check */
-router.get("/health", (req, res) => {
+router.get("/health", (req: express.Request, res: express.Response) => {
     res.status(200).json({
         status: "ok",
         timestamp: new Date().toISOString(),

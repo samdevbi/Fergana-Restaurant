@@ -53,7 +53,7 @@ git push origin main
 2. **Configure Build Settings**:
    - **Name**: `fergana-backend` (or your choice)
    - **Environment**: `Node`
-   - **Build Command**: `npm install && npm run build`
+   - **Build Command**: `npm install --include=dev && npm run build`
    - **Start Command**: `npm start`
    - **Root Directory**: `.` (root)
 
