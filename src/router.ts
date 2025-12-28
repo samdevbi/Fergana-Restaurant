@@ -71,7 +71,7 @@ router.put(
     productController.updateChosenProduct
 );
 router.delete(
-    "/product/productDelete:id",
+    "/product/productDelete/:id",
     memberController.verifyAuth,
     verifyOwner,
     productController.deleteProduct
