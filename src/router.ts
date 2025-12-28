@@ -70,6 +70,12 @@ router.put(
     verifyOwner,
     productController.updateChosenProduct
 );
+router.delete(
+    "/product/:id",
+    memberController.verifyAuth,
+    verifyOwner,
+    productController.deleteProduct
+);
 
 /* QR Customer Routes (Public - No Authentication) */
 router.get("/qr/:tableId/getMenu", qrController.getMenu);

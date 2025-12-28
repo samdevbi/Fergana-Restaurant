@@ -19,7 +19,7 @@ productController.getProducts = async (req: Request, res: Response) => {
         const { page, limit, order, productCollection, search } = req.query;
         const pageNum = Number(page);
         const limitNum = Number(limit);
-        
+
         const inquiry: ProductInquiry = {
             order: String(order) || "createdAt",
             page: (pageNum && pageNum > 0) ? pageNum : 1,
@@ -108,5 +108,22 @@ productController.updateChosenProduct = async (req: Request, res: Response) => {
     }
 };
 
+productController.deleteProduct = async (req: ExtendedRequest, res: Response) => {
+    try {
+        console.log("deleteProduct");
+        const { id } = req.params;
+
+        const result = await productService.deleteProduct(id);
+
+        res.status(HttpCode.OK).json({
+            message: "Product deleted successfully",
+            data: result
+        });
+    } catch (err) {
+        console.log("Error, deleteProduct:", err);
+        if (err instanceof Errors) res.status(err.code).json(err);
+        else res.status(Errors.standard.code).json(Errors.standard);
+    }
+};
 
 export default productController;
