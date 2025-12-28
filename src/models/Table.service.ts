@@ -9,11 +9,17 @@ import { generateQRCodeFile } from "../libs/utils/qrcode.generator";
 
 class TableService {
     private readonly tableModel;
-    private readonly orderService;
+    private _orderService: OrderService | null = null;
 
     constructor() {
         this.tableModel = TableModel;
-        this.orderService = new OrderService();
+    }
+
+    private get orderService(): OrderService {
+        if (!this._orderService) {
+            this._orderService = new OrderService();
+        }
+        return this._orderService;
     }
 
     public async createTable(input: TableInput): Promise<Table> {

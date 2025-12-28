@@ -34,13 +34,20 @@ class OrderService {
   private readonly orderModel;
   private readonly orderItemModel;
   private readonly memberService;
-  private readonly tableService;
+  private _tableService: TableService | null = null;
 
   constructor() {
     this.orderModel = OrderModel;
     this.orderItemModel = OrderItemModel;
     this.memberService = new MemberService();
-    this.tableService = new TableService();
+  }
+
+  private get tableService(): TableService {
+    if (!this._tableService) {
+      const TableServiceClass = require("./Table.service").default;
+      this._tableService = new TableServiceClass();
+    }
+    return this._tableService as TableService;
   }
 
   public async createOrder(
