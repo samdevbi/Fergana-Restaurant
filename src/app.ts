@@ -22,7 +22,7 @@ app.use(cors({
         if (allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
-            callback(null, true); // Allow all origins in development, restrict in production
+            callback(new Error("Not allowed by CORS"));
         }
     },
     credentials: true,

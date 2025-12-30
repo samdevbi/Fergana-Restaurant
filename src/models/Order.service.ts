@@ -548,22 +548,26 @@ class OrderService {
       throw new Errors(HttpCode.BAD_REQUEST, Message.UPDATE_FAILED);
     }
 
-    // Delete existing order items
-    await this.orderItemModel.deleteMany({ orderId: id }).exec();
+    // Get existing order items to calculate current total
+    const existingItems = await this.orderItemModel.find({ orderId: id }).exec();
+    const existingTotal = existingItems.reduce((sum, item) => sum + item.itemPrice * item.itemQuantity, 0);
 
-    // Create new order items
+    // Add new items to existing order (don't delete existing items)
     await this.recordOrderItem(id, input.items);
 
-    // Recalculate total
-    const amount = input.items.reduce((accumulator: number, item: OrderItemInput) => {
+    // Calculate new items total
+    const newItemsTotal = input.items.reduce((accumulator: number, item: OrderItemInput) => {
       return accumulator + item.itemPrice * item.itemQuantity;
     }, 0);
+
+    // Calculate total: existing items + new items
+    const newTotal = existingTotal + newItemsTotal;
 
     // Update order total
     const result = await this.orderModel.findByIdAndUpdate(
       id,
       {
-        orderTotal: amount + (order.orderDelivery || 0),
+        orderTotal: newTotal + (order.orderDelivery || 0),
       },
       { new: true }
     ).exec();
@@ -572,22 +576,38 @@ class OrderService {
       throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
     }
 
+    // Get full order with all items
+    const fullOrder = await this.getOrderById(id.toString());
+
     // Emit WebSocket event
-    emitOrderUpdate(id, "order:item-modified", {
+    emitOrderUpdate(id, "order:items-added", {
       orderId: id,
-      items: input.items,
+      newItems: input.items,
+      updatedTotal: result.orderTotal,
     });
 
-    // Notify staff and owner about order modification
-    notifyServiceStaff(order.restaurantId, "order:modified", {
+    // Notify kitchen if order is confirmed or preparing
+    if (order.orderStatus === OrderStatus.CONFIRMED || order.orderStatus === OrderStatus.PREPARING) {
+      notifyKitchen(order.restaurantId, {
+        _id: id.toString(),
+        orderNumber: fullOrder.orderNumber,
+        tableNumber: fullOrder.tableNumber,
+        newItems: input.items,
+        updatedOrder: fullOrder,
+        event: "order:items-added",
+      });
+    }
+
+    // Notify service staff and owner about order modification
+    notifyServiceStaff(order.restaurantId, "order:items-added", {
       orderId: id,
       orderNumber: order.orderNumber,
       tableNumber: order.tableNumber,
-      items: input.items,
-      newTotal: result.orderTotal,
+      newItems: input.items,
+      updatedTotal: result.orderTotal,
     });
 
-    return result;
+    return fullOrder;
   }
 
   public async getKitchenOrders(restaurantId: ObjectId | string): Promise<Order[]> {

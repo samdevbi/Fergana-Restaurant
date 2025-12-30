@@ -15,7 +15,6 @@ const memberController: T = {};
 memberController.signup = async (req: Request, res: Response) => {
     try {
         console.log("Signup");
-        console.log("Request body:", req.body);
         const input: MemberInput = req.body;
 
         if (!input.memberPassword) {
