@@ -59,6 +59,13 @@ router.get(
 );
 
 router.get(
+    "/product/getAllProduct",
+    memberController.verifyAuth,
+    verifyOwner,
+    productController.getProduct
+);
+
+router.get(
     "/product/:id",
     memberController.verifyAuth,
     verifyOwner,

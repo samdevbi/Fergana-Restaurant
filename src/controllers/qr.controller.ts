@@ -95,13 +95,13 @@ qrController.createOrder = async (req: Request, res: Response) => {
 
         // Get table info to check status
         const table = await tableService.getTableById(tableId);
-        
+
         // Check if table is available for orders
         const isAvailable = await tableService.checkTableAvailabilityForOrder(tableId);
-        
+
         // Check if there's an existing order on this table
         const existingOrder = await orderService.getOrderByTable(tableId);
-        
+
         // If table is not ACTIVE but has existing orders, ask for permission
         if (!isAvailable && existingOrder && !req.body.hasPermission) {
             const existingOrderDetails = await orderService.getOrderById(existingOrder._id.toString());
@@ -118,7 +118,7 @@ qrController.createOrder = async (req: Request, res: Response) => {
                 },
             });
         }
-        
+
         // If table is not ACTIVE and no permission given, reject
         if (!isAvailable && !req.body.hasPermission) {
             throw new Errors(
