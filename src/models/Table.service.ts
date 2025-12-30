@@ -246,6 +246,35 @@ class TableService {
             activeOrders: activeOrders,
         } as Table & { orderHistory: any[]; activeOrders: any[] };
     }
+
+    /**
+     * Delete table
+     * Checks for active orders before deletion
+     */
+    public async deleteTable(tableId: ObjectId | string): Promise<Table> {
+        const id = shapeIntoMongooseObjectId(tableId);
+
+        // Check if table exists
+        const table = await this.tableModel.findById(id).exec();
+        if (!table) {
+            throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
+        }
+
+        // Check for active orders
+        const activeOrders = await this.orderService.getActiveOrdersByTable(id);
+        if (activeOrders.length > 0) {
+            throw new Errors(HttpCode.BAD_REQUEST, "Cannot delete table with active orders");
+        }
+
+        // Delete table
+        const result = await this.tableModel.findByIdAndDelete(id).exec();
+
+        if (!result) {
+            throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
+        }
+
+        return result;
+    }
 }
 
 export default TableService;

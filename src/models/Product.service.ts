@@ -19,7 +19,10 @@ class ProductService {
             match.productCollection = inquiry.productCollection;
 
         if (inquiry.search) {
-            match.productName = { $regex: new RegExp(inquiry.search, "i") };
+            match.$or = [
+                { productNameUz: { $regex: new RegExp(inquiry.search, "i") } },
+                { productNameKr: { $regex: new RegExp(inquiry.search, "i") } },
+            ];
         }
 
         const sort: T = inquiry.order === "productPrice" ? { [inquiry.order]: 1 } : { [inquiry.order]: -1 };

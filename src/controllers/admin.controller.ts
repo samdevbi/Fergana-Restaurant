@@ -218,6 +218,28 @@ adminController.updateTable = async (req: ExtendedRequest, res: Response) => {
 };
 
 /**
+ * Delete table
+ * Requires: JWT authentication + OWNER role
+ */
+adminController.deleteTable = async (req: ExtendedRequest, res: Response) => {
+    try {
+        console.log("deleteTable");
+        const { id } = req.params;
+
+        const result = await tableService.deleteTable(id);
+
+        res.status(HttpCode.OK).json({
+            message: "Table deleted successfully",
+            data: result
+        });
+    } catch (err) {
+        console.log("Error, deleteTable:", err);
+        if (err instanceof Errors) res.status(err.code).json(err);
+        else res.status(Errors.standard.code).json(Errors.standard);
+    }
+};
+
+/**
  * Get all staff members
  * Requires: JWT authentication + OWNER role
  */

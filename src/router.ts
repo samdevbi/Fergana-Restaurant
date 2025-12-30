@@ -191,6 +191,12 @@ router.put(
     verifyOwner,
     adminController.updateTable
 );
+router.delete(
+    "/admin/deleteTable/:id",
+    memberController.verifyAuth,
+    verifyOwner,
+    adminController.deleteTable
+);
 router.get(
     "/admin/staff",
     memberController.verifyAuth,
