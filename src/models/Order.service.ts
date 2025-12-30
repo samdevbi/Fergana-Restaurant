@@ -761,12 +761,40 @@ class OrderService {
   /**
    * Get all orders for a table (order history - including completed/cancelled)
    */
-  public async getAllOrdersByTable(tableId: ObjectId | string): Promise<Order[]> {
+  public async getAllOrdersByTable(tableId: ObjectId | string, filter?: string): Promise<Order[]> {
     const id = shapeIntoMongooseObjectId(tableId);
+
+    // Build match condition based on filter
+    const matchCondition: any = { tableId: id };
+
+    if (filter) {
+      switch (filter.toLowerCase()) {
+        case "paid":
+        case "verified":
+          // Payment made (VERIFIED)
+          matchCondition.paymentStatus = PaymentStatus.VERIFIED;
+          matchCondition.orderStatus = { $ne: OrderStatus.CANCELLED };
+          break;
+        case "unpaid":
+        case "pending":
+          // Payment not made (PENDING)
+          matchCondition.paymentStatus = PaymentStatus.PENDING;
+          matchCondition.orderStatus = { $ne: OrderStatus.CANCELLED };
+          break;
+        case "cancelled":
+        case "cancel":
+          // Cancelled orders
+          matchCondition.orderStatus = OrderStatus.CANCELLED;
+          break;
+        default:
+          // No filter - return all orders
+          break;
+      }
+    }
 
     const result = await this.orderModel
       .aggregate([
-        { $match: { tableId: id } },
+        { $match: matchCondition },
         { $sort: { createdAt: -1 } }, // Most recent first
         {
           $lookup: {

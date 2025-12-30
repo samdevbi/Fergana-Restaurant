@@ -198,12 +198,14 @@ serviceController.getTables = async (req: ExtendedRequest, res: Response) => {
 /**
  * Get table with order history
  * Requires: JWT authentication + SERVICE/OWNER role
+ * Query params: filter - "paid", "unpaid", "cancelled" (optional)
  */
 serviceController.getTableWithHistory = async (req: ExtendedRequest, res: Response) => {
     try {
         const { tableId } = req.params;
+        const { filter } = req.query; // Filter: "paid", "unpaid", "cancelled"
 
-        const result = await tableService.getTableWithOrderHistory(tableId);
+        const result = await tableService.getTableWithOrderHistory(tableId, filter as string);
 
         res.status(HttpCode.OK).json({
             table: {
@@ -217,6 +219,7 @@ serviceController.getTableWithHistory = async (req: ExtendedRequest, res: Respon
             orderHistory: result.orderHistory,
             totalOrders: result.orderHistory.length,
             activeOrdersCount: result.activeOrders.length,
+            filter: filter || "all", // Show applied filter
         });
     } catch (err) {
         console.log("Error, getTableWithHistory:", err);

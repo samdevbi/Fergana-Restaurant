@@ -227,8 +227,9 @@ class TableService {
 
     /**
      * Get table with all its orders (order history)
+     * @param filter - Optional filter: "paid", "unpaid", "cancelled"
      */
-    public async getTableWithOrderHistory(tableId: ObjectId | string): Promise<Table & { orderHistory: any[]; activeOrders: any[] }> {
+    public async getTableWithOrderHistory(tableId: ObjectId | string, filter?: string): Promise<Table & { orderHistory: any[]; activeOrders: any[] }> {
         const id = shapeIntoMongooseObjectId(tableId);
         const table = await this.tableModel.findById(id).exec();
 
@@ -236,8 +237,8 @@ class TableService {
             throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
         }
 
-        // Get all orders for this table
-        const orderHistory = await this.orderService.getAllOrdersByTable(id);
+        // Get all orders for this table (with optional filter)
+        const orderHistory = await this.orderService.getAllOrdersByTable(id, filter);
         const activeOrders = await this.orderService.getActiveOrdersByTableWithDetails(id);
 
         return {
