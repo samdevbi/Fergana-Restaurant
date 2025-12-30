@@ -62,7 +62,7 @@ router.get(
     "/product/getAllProduct",
     memberController.verifyAuth,
     verifyOwner,
-    productController.getProduct
+    productController.getAllProduct
 );
 
 router.get(
