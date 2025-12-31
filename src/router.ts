@@ -5,8 +5,6 @@ import makeUploader from "./libs/utils/uploader";
 import productController from "./controllers/product.controller";
 import orderController from "./controllers/order.controller";
 import qrController from "./controllers/qr.controller";
-import kitchenController from "./controllers/kitchen.controller";
-import serviceController from "./controllers/service.controller";
 import adminController from "./controllers/admin.controller";
 import { verifyKitchenStaff, verifyServiceStaff, verifyOwner } from "./libs/rbac/role.middleware";
 import { qrOrderRateLimiter } from "./libs/middleware/rateLimiter";
@@ -50,22 +48,22 @@ router.post("/qr/:tableId/createOrder", qrOrderRateLimiter, qrController.createO
 
 /* Kitchen Staff Routes (JWT + KITCHEN role) */
 router.get(
-    "/staff/kitchen/getOrders",
+    "/kitchen/getOrders",
     memberController.verifyAuth,
     verifyKitchenStaff,
-    kitchenController.getOrders
+    orderController.getOrdersByKitchen
 );
 router.get(
-    "/staff/kitchen/getOrder/:id",
+    "/kitchen/getOrder/:id",
     memberController.verifyAuth,
     verifyKitchenStaff,
-    kitchenController.getOrder
+    orderController.getOrderByKitchen
 );
 router.post(
-    "/staff/kitchen/order/:id/markReady",
+    "/kitchen/order/:id/markReady",
     memberController.verifyAuth,
     verifyKitchenStaff,
-    kitchenController.markOrderReady
+    orderController.markOrderReadyByKitchen
 );
 
 

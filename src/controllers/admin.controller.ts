@@ -49,7 +49,6 @@ adminController.getDashboard = async (req: ExtendedRequest, res: Response) => {
         const activeTables = tables.filter(t => t.status === "ACTIVE").length;
         const occupiedTables = tables.filter(t => t.status === "OCCUPIED").length;
         const pausedTables = tables.filter(t => t.status === "PAUSE").length;
-        const blockedTables = tables.filter(t => t.status === "BLOCK").length;
 
         res.status(HttpCode.OK).json({
             today: {
@@ -61,7 +60,6 @@ adminController.getDashboard = async (req: ExtendedRequest, res: Response) => {
                 active: activeTables,
                 occupied: occupiedTables,
                 paused: pausedTables,
-                blocked: blockedTables,
             },
         });
     } catch (err) {
@@ -101,35 +99,6 @@ adminController.getRevenue = async (req: ExtendedRequest, res: Response) => {
         });
     } catch (err) {
         console.log("Error, getRevenue:", err);
-        if (err instanceof Errors) res.status(err.code).json(err);
-        else res.status(Errors.standard.code).json(Errors.standard);
-    }
-};
-
-/**
- * Get popular items
- * Requires: JWT authentication + OWNER role
- */
-adminController.getPopularItems = async (req: ExtendedRequest, res: Response) => {
-    try {
-        console.log("getPopularItems");
-        const limit = Number(req.query.limit) || 10;
-
-        // Get restaurant owner (restaurantId)
-        const restaurant = await memberService.getRestaurant();
-        const restaurantId = restaurant._id;
-
-        // Get all products
-        const products = await productService.getAllProduct();
-
-        // For now, return all products
-        // TODO: Implement popularity calculation based on order history
-        res.status(HttpCode.OK).json({
-            items: products.slice(0, limit),
-            count: products.length,
-        });
-    } catch (err) {
-        console.log("Error, getPopularItems:", err);
         if (err instanceof Errors) res.status(err.code).json(err);
         else res.status(Errors.standard.code).json(Errors.standard);
     }
@@ -303,13 +272,17 @@ adminController.updateStaff = async (req: ExtendedRequest, res: Response) => {
     try {
         console.log("updateStaff");
         const { id } = req.params;
+
+        // Get the member first to pass to updateMember
+        const member = await memberService.getMemberById(id);
+
         const input: MemberUpdateInput = {
             _id: id as any,
             memberStatus: req.body.memberStatus,
             memberName: req.body.memberName,
         };
 
-        const result = await memberService.updateChosenUser(input);
+        const result = await memberService.updateMember(member, input);
 
         res.status(HttpCode.OK).json(result);
     } catch (err) {

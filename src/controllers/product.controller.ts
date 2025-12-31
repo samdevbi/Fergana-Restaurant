@@ -56,19 +56,6 @@ productController.getProduct = async (req: ExtendedRequest, res: Response) => {
     }
 }
 
-productController.getAllProduct = async (req: Request, res: Response) => {
-    try {
-        console.log("getAllProduct");
-        const data: Product[] = await productService.getAllProduct();
-
-        res.status(HttpCode.OK).json(data);
-    } catch (err) {
-        console.log("Error, getAllProduct:", err);
-        if (err instanceof Errors) res.status(err.code).json(err);
-        else res.status(Errors.standard.code).json(Errors.standard);
-    }
-};
-
 productController.createNewProduct = async (req: AdminRequest, res: Response) => {
     try {
         console.log("createNewProduct");

@@ -102,77 +102,6 @@ class TableService {
         return result;
     }
 
-    /**
-     * Check if table is available for customer orders
-     * Only ACTIVE status allows orders
-     */
-    public async checkTableAvailabilityForOrder(tableId: ObjectId | string): Promise<boolean> {
-        const table = await this.getTableById(tableId);
-        return table.status === TableStatus.ACTIVE;
-    }
-
-    public async getTableByQR(qrCode: string): Promise<Table> {
-        const result = await this.tableModel.findOne({ qrCode: qrCode }).exec();
-
-        if (!result) {
-            throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
-        }
-
-        return result;
-    }
-
-    public async checkTableAvailability(tableId: ObjectId | string): Promise<boolean> {
-        const id = shapeIntoMongooseObjectId(tableId);
-        const table = await this.tableModel.findById(id).exec();
-
-        if (!table) {
-            throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
-        }
-
-        // Allow multiple orders - table is available if it exists
-        return true;
-    }
-
-    public async occupyTable(tableId: ObjectId | string, orderId: ObjectId | string): Promise<Table> {
-        const tableIdObj = shapeIntoMongooseObjectId(tableId);
-        const orderIdObj = shapeIntoMongooseObjectId(orderId);
-
-        // Update table to occupied (allow multiple orders, just mark as occupied)
-        const result = await this.tableModel.findByIdAndUpdate(
-            tableIdObj,
-            {
-                status: TableStatus.OCCUPIED,
-                currentOrderId: orderIdObj, // Keep reference to first order
-            },
-            { new: true }
-        ).exec();
-
-        if (!result) {
-            throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
-        }
-
-        return result;
-    }
-
-    public async freeTable(tableId: ObjectId | string): Promise<Table> {
-        const id = shapeIntoMongooseObjectId(tableId);
-
-        const result = await this.tableModel.findOneAndUpdate(
-            { _id: id },
-            {
-                status: TableStatus.ACTIVE,
-                currentOrderId: null,
-            },
-            { new: true }
-        ).exec();
-
-        if (!result) {
-            throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
-        }
-
-        return result;
-    }
-
     public async updateTable(tableId: ObjectId | string, input: TableUpdateInput): Promise<Table> {
         const id = shapeIntoMongooseObjectId(tableId);
 
@@ -194,64 +123,6 @@ class TableService {
         return result;
     }
 
-    public async updateQRCodeUrl(tableId: ObjectId | string, qrCodeUrl: string): Promise<Table> {
-        const id = shapeIntoMongooseObjectId(tableId);
-
-        const result = await this.tableModel.findOneAndUpdate(
-            { _id: id },
-            { qrCodeUrl: qrCodeUrl },
-            { new: true }
-        ).exec();
-
-        if (!result) {
-            throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
-        }
-
-        return result;
-    }
-
-    public async getTableByTableNumber(restaurantId: ObjectId | string, tableNumber: number): Promise<Table> {
-        const id = shapeIntoMongooseObjectId(restaurantId);
-
-        const result = await this.tableModel.findOne({
-            restaurantId: id,
-            tableNumber: tableNumber,
-        }).exec();
-
-        if (!result) {
-            throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
-        }
-
-        return result;
-    }
-
-    /**
-     * Get table with all its orders (order history)
-     * @param filter - Optional filter: "paid", "unpaid", "cancelled"
-     */
-    public async getTableWithOrderHistory(tableId: ObjectId | string, filter?: string): Promise<Table & { orderHistory: any[]; activeOrders: any[] }> {
-        const id = shapeIntoMongooseObjectId(tableId);
-        const table = await this.tableModel.findById(id).exec();
-
-        if (!table) {
-            throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
-        }
-
-        // Get all orders for this table (with optional filter)
-        const orderHistory = await this.orderService.getAllOrdersByTable(id, filter);
-        const activeOrders = await this.orderService.getActiveOrdersByTableWithDetails(id);
-
-        return {
-            ...table.toObject(),
-            orderHistory: orderHistory,
-            activeOrders: activeOrders,
-        } as Table & { orderHistory: any[]; activeOrders: any[] };
-    }
-
-    /**
-     * Delete table
-     * Checks for active orders before deletion
-     */
     public async deleteTable(tableId: ObjectId | string): Promise<Table> {
         const id = shapeIntoMongooseObjectId(tableId);
 
@@ -259,12 +130,6 @@ class TableService {
         const table = await this.tableModel.findById(id).exec();
         if (!table) {
             throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
-        }
-
-        // Check for active orders
-        const activeOrders = await this.orderService.getActiveOrdersByTable(id);
-        if (activeOrders.length > 0) {
-            throw new Errors(HttpCode.BAD_REQUEST, "Cannot delete table with active orders");
         }
 
         // Delete table
