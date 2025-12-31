@@ -18,17 +18,11 @@ export interface Order {
     restaurantId: ObjectId;
     tableId: ObjectId;
     tableNumber: number;
-    memberId?: ObjectId;
     orderTotal: number;
     orderStatus: OrderStatus;
     orderType: OrderType;
     paymentStatus: PaymentStatus;
     paymentMethod?: string;
-    verifiedBy?: ObjectId;
-    verifiedAt?: Date;
-    completedBy?: ObjectId;
-    completedAt?: Date;
-    cancellationReason?: string;
     createdAt: Date;
     updatedAt: Date;
     /* from aggregations */
@@ -43,36 +37,24 @@ export interface OrderItemInput {
     orderId?: ObjectId;
 }
 
-export interface OrderCreateInput {
-    tableId: string;
-    items: OrderItemInput[];
-    existingOrderId?: string;
-    isAddingToExisting?: boolean;
-    hasPermission?: boolean; // Permission to create order on non-ACTIVE table
-    isCustomerOrder?: boolean; // true if customer confirms existing order is theirs, false if not
-}
-
-export interface OrderConfirmationResponse {
-    needsConfirmation: boolean;
-    existingOrder?: Order;
-    needsPermission?: boolean;
-    message?: string;
-    isCustomerOrder?: boolean; // true if customer confirms it's their order, false if not
-    needsStaffAction?: boolean; // true if customer says NO and needs staff to close order
-}
-
 export interface OrderInquiry {
     page: number;
     limit: number;
     orderStatus?: OrderStatus;
 }
 
+export interface OrderCreateInput {
+    tableId: string;
+    items: OrderItemInput[];
+    hasPermission?: boolean;
+}
+
 export interface OrderUpdateInput {
     orderId: string;
     action: "update-status" | "complete" | "cancel" | "modify-items";
-    orderStatus?: OrderStatus; // For update-status action
-    reason?: string; // For cancel action
-    items?: OrderItemInput[]; // For modify-items action
+    orderStatus?: OrderStatus;
+    items?: OrderItemInput[];
+    reason?: string;
 }
 
 export interface PaymentVerificationInput {
@@ -90,7 +72,17 @@ export interface OrderCancelInput {
     reason?: string;
 }
 
-export interface OrderModifyItemsInput {
-    orderId: string;
-    items: OrderItemInput[];
+export interface OrderConfirmationResponse {
+    needsConfirmation?: boolean;
+    hasExistingOrder?: boolean;
+    needsStaffAction?: boolean;
+    isCustomerOrder?: boolean;
+    message?: string;
+    existingOrder?: {
+        orderId: ObjectId;
+        orderNumber: string;
+        orderStatus: OrderStatus;
+        orderTotal: number;
+        items: OrderItem[];
+    };
 }

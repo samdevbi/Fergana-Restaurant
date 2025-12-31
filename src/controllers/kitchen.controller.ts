@@ -53,5 +53,23 @@ kitchenController.getOrder = async (req: ExtendedRequest, res: Response) => {
     }
 };
 
+/**
+ * Mark order as READY
+ * Requires: JWT authentication + KITCHEN role
+ */
+kitchenController.markOrderReady = async (req: ExtendedRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+
+        const result = await orderService.markOrderAsReady(id, req.member._id);
+
+        res.status(HttpCode.OK).json(result);
+    } catch (err) {
+        console.log("Error, markOrderReady:", err);
+        if (err instanceof Errors) res.status(err.code).json(err);
+        else res.status(Errors.standard.code).json(Errors.standard);
+    }
+};
+
 export default kitchenController;
 

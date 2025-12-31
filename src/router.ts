@@ -61,6 +61,12 @@ router.get(
     verifyKitchenStaff,
     kitchenController.getOrder
 );
+router.post(
+    "/staff/kitchen/order/:id/markReady",
+    memberController.verifyAuth,
+    verifyKitchenStaff,
+    kitchenController.markOrderReady
+);
 
 
 

@@ -136,178 +136,6 @@ class OrderService {
     return `ORD-${Date.now()}`;
   }
 
-  public async getMyOrders(
-    member: Member,
-    inquery: OrderInquiry
-  ): Promise<Order[]> {
-    const memberId = shapeIntoMongooseObjectId(member._id);
-    const matches: any = { memberId: memberId };
-    if (inquery.orderStatus) {
-      matches.orderStatus = inquery.orderStatus;
-    }
-
-    const result = await this.orderModel
-      .aggregate([
-        { $match: matches },
-        { $sort: { updatedAt: -1 } },
-        { $skip: (inquery.page - 1) * inquery.limit },
-        { $limit: inquery.limit },
-        {
-          $lookup: {
-            from: "orderItems",
-            localField: "_id",
-            foreignField: "orderId",
-            as: "orderItems",
-          },
-        },
-
-        {
-          $lookup: {
-            from: "products",
-            localField: "orderItems.productId",
-            foreignField: "_id",
-            as: "productData",
-          },
-        },
-      ])
-      .exec();
-    if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
-    return result;
-  }
-
-  public async updateOrder(
-    member: Member,
-    input: OrderUpdateInput
-  ): Promise<Order> {
-    const memberId = shapeIntoMongooseObjectId(member._id);
-    const orderId = shapeIntoMongooseObjectId(input.orderId);
-
-    if (!input.action) {
-      throw new Errors(HttpCode.BAD_REQUEST, "Action is required (update-status, complete, cancel, modify-items)");
-    }
-
-    let result: Order;
-
-    switch (input.action) {
-      case "update-status":
-        if (!input.orderStatus) {
-          throw new Errors(HttpCode.BAD_REQUEST, "orderStatus is required for update-status action");
-        }
-
-        // For members, only allow updating their own orders
-        result = await this.orderModel.findOneAndUpdate(
-          {
-            memberId: memberId,
-            _id: orderId,
-          },
-          { orderStatus: input.orderStatus },
-          { new: true }
-        ).exec();
-
-        if (!result) throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
-
-        // Emit status change notification
-        emitOrderStatusChange(
-          orderId,
-          input.orderStatus,
-          result.paymentStatus,
-          result.restaurantId,
-          result.tableId
-        );
-
-        return result;
-
-      case "complete":
-        // Staff can complete any order
-        result = await this.completeOrder(orderId.toString(), memberId);
-        return result;
-
-      case "cancel":
-        // Staff can cancel any order
-        const cancelInput: OrderCancelInput = {
-          orderId: orderId.toString(),
-          reason: input.reason,
-        };
-        result = await this.cancelOrder(orderId.toString(), memberId, cancelInput);
-        return result;
-
-      case "modify-items":
-        if (!input.items || input.items.length === 0) {
-          throw new Errors(HttpCode.BAD_REQUEST, "items are required for modify-items action");
-        }
-
-        // Check order exists and can be modified
-        const modifyOrder = await this.orderModel.findById(orderId).exec();
-        if (!modifyOrder) {
-          throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
-        }
-
-        // Can only modify if PROCESS
-        if (modifyOrder.orderStatus !== OrderStatus.PROCESS) {
-          throw new Errors(HttpCode.BAD_REQUEST, Message.UPDATE_FAILED);
-        }
-
-        // Get existing order items to calculate current total
-        const existingItems = await this.orderItemModel.find({ orderId: orderId }).exec();
-        const existingTotal = existingItems.reduce((sum, item) => sum + item.itemPrice * item.itemQuantity, 0);
-
-        // Add new items to existing order
-        await this.recordOrderItem(orderId, input.items);
-
-        // Calculate new items total
-        const newItemsTotal = input.items.reduce((accumulator: number, item: OrderItemInput) => {
-          return accumulator + item.itemPrice * item.itemQuantity;
-        }, 0);
-
-        // Calculate total: existing items + new items
-        const newTotal = existingTotal + newItemsTotal;
-
-        // Update order total
-        result = await this.orderModel.findByIdAndUpdate(
-          orderId,
-          {
-            orderTotal: newTotal,
-          },
-          { new: true }
-        ).exec();
-
-        if (!result) {
-          throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
-        }
-
-        // Get full order with all items
-        const fullOrder = await this.getOrderById(orderId.toString());
-
-        // Notify kitchen if order is in process
-        if (modifyOrder.orderStatus === OrderStatus.PROCESS) {
-          notifyKitchen(modifyOrder.restaurantId, {
-            _id: orderId.toString(),
-            orderNumber: fullOrder.orderNumber,
-            tableNumber: fullOrder.tableNumber,
-            newItems: input.items,
-            updatedOrder: fullOrder,
-            event: "order:items-added",
-          });
-        }
-
-        // Notify service staff and owner about order modification
-        notifyServiceStaff(modifyOrder.restaurantId.toString(), "order:items-added", {
-          orderId: orderId.toString(),
-          orderNumber: modifyOrder.orderNumber,
-          tableNumber: modifyOrder.tableNumber,
-          newItems: input.items,
-          updatedTotal: result.orderTotal,
-        });
-
-        return fullOrder;
-
-      default:
-        throw new Errors(HttpCode.BAD_REQUEST, `Invalid action: ${input.action}. Use: update-status, complete, cancel, modify-items`);
-    }
-  }
-
-  // QR Order Methods
-
   public async createQROrder(input: OrderCreateInput): Promise<Order> {
     const tableId = shapeIntoMongooseObjectId(input.tableId);
 
@@ -423,34 +251,35 @@ class OrderService {
       throw new Errors(HttpCode.BAD_REQUEST, Message.CREATE_FAILED);
     }
   }
-
-  public async verifyPayment(
+  /**
+   * Mark order as READY (Kitchen staff only)
+   * Can only mark PROCESS orders as READY
+   */
+  public async markOrderAsReady(
     orderId: string,
-    staffId: ObjectId,
-    input: PaymentVerificationInput
+    kitchenStaffId: ObjectId
   ): Promise<Order> {
     const id = shapeIntoMongooseObjectId(orderId);
-    const staffIdObj = shapeIntoMongooseObjectId(staffId);
 
-    // Check order exists and is pending payment
+    // Get order to check current status
     const order = await this.orderModel.findById(id).exec();
     if (!order) {
       throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
     }
 
-    if (order.paymentStatus !== PaymentStatus.PENDING) {
-      throw new Errors(HttpCode.BAD_REQUEST, Message.UPDATE_FAILED);
+    // Can only mark PROCESS orders as READY
+    if (order.orderStatus !== OrderStatus.PROCESS) {
+      throw new Errors(
+        HttpCode.BAD_REQUEST,
+        "Order must be in PROCESS status to mark as READY"
+      );
     }
 
-    // Update payment status and order status
+    // Update order status to READY
     const result = await this.orderModel.findByIdAndUpdate(
       id,
       {
-        paymentStatus: PaymentStatus.VERIFIED,
-        orderStatus: OrderStatus.PROCESS,
-        paymentMethod: input.paymentMethod,
-        verifiedBy: staffIdObj,
-        verifiedAt: new Date(),
+        orderStatus: OrderStatus.READY,
       },
       { new: true }
     ).exec();
@@ -459,129 +288,28 @@ class OrderService {
       throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
     }
 
-    // Emit WebSocket events
+    // Get full order with items for notification
+    const fullOrder = await this.getOrderById(id.toString());
+
+    // Notify service staff and owner that order is ready
     emitOrderStatusChange(
       id,
-      OrderStatus.PROCESS,
-      PaymentStatus.VERIFIED,
-      order.restaurantId,
-      order.tableId
-    );
-    notifyKitchen(order.restaurantId, result);
-
-    return result;
-  }
-
-  public async completeOrder(
-    orderId: string,
-    staffId: ObjectId
-  ): Promise<Order> {
-    const id = shapeIntoMongooseObjectId(orderId);
-    const staffIdObj = shapeIntoMongooseObjectId(staffId);
-
-    // Get order to find tableId
-    const order = await this.orderModel.findById(id).exec();
-    if (!order) {
-      throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
-    }
-
-    // Update order status
-    const result = await this.orderModel.findByIdAndUpdate(
-      id,
-      {
-        orderStatus: OrderStatus.COMPLETED,
-        completedBy: staffIdObj,
-        completedAt: new Date(),
-      },
-      { new: true }
-    ).exec();
-
-    if (!result) {
-      throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
-    }
-
-    // Check if there are other active orders on this table
-    const activeOrders = await this.getActiveOrdersByTable(order.tableId);
-
-    // Only free table if no other active orders exist
-    if (activeOrders.length === 0) {
-      await this.tableService.freeTable(order.tableId);
-      emitTableUpdate(order.tableId, TableStatus.ACTIVE);
-    }
-
-    // Notify staff and owner about order completion
-    emitOrderStatusChange(
-      id,
-      OrderStatus.COMPLETED,
+      OrderStatus.READY,
       order.paymentStatus,
       order.restaurantId,
       order.tableId
     );
 
-    return result;
-  }
-
-  public async cancelOrder(
-    orderId: string,
-    staffId: ObjectId,
-    input: OrderCancelInput
-  ): Promise<Order> {
-    const id = shapeIntoMongooseObjectId(orderId);
-    const staffIdObj = shapeIntoMongooseObjectId(staffId);
-
-    // Get order to find tableId
-    const order = await this.orderModel.findById(id).exec();
-    if (!order) {
-      throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
-    }
-
-    // Check if order can be cancelled
-    if (order.orderStatus === OrderStatus.COMPLETED) {
-      throw new Errors(HttpCode.BAD_REQUEST, Message.UPDATE_FAILED);
-    }
-
-    // Update order status
-    const result = await this.orderModel.findByIdAndUpdate(
-      id,
-      {
-        orderStatus: OrderStatus.CANCELLED,
-        cancellationReason: input.reason || "Cancelled by staff",
-      },
-      { new: true }
-    ).exec();
-
-    if (!result) {
-      throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
-    }
-
-    // Check if there are other active orders on this table
-    const activeOrders = await this.getActiveOrdersByTable(order.tableId);
-
-    // Only free table if no other active orders exist
-    if (activeOrders.length === 0) {
-      await this.tableService.freeTable(order.tableId);
-      emitTableUpdate(order.tableId, TableStatus.ACTIVE);
-    }
-
-    // Notify staff and owner about order cancellation
-    emitOrderStatusChange(
-      id,
-      OrderStatus.CANCELLED,
-      order.paymentStatus,
-      order.restaurantId,
-      order.tableId
-    );
-
-    // Also send specific cancellation notification
-    notifyServiceStaff(order.restaurantId, "order:cancelled", {
-      orderId: id,
-      orderNumber: order.orderNumber,
-      tableNumber: order.tableNumber,
-      orderStatus: OrderStatus.CANCELLED,
-      reason: input.reason,
+    // Also notify via service staff channel
+    notifyServiceStaff(order.restaurantId.toString(), "order:ready", {
+      orderId: id.toString(),
+      orderNumber: fullOrder.orderNumber,
+      tableNumber: fullOrder.tableNumber,
+      orderStatus: OrderStatus.READY,
+      orderTotal: fullOrder.orderTotal,
     });
 
-    return result;
+    return fullOrder;
   }
 
 
@@ -623,102 +351,10 @@ class OrderService {
     return result;
   }
 
-  public async getServiceOrders(restaurantId: ObjectId | string): Promise<any[]> {
-    const id = shapeIntoMongooseObjectId(restaurantId);
-
-    // Get all individual orders
-    const orders = await this.orderModel
-      .aggregate([
-        {
-          $match: {
-            restaurantId: id,
-            $or: [
-              { orderStatus: OrderStatus.PROCESS, paymentStatus: PaymentStatus.PENDING },
-              { orderStatus: OrderStatus.READY }
-            ]
-          }
-        },
-        { $sort: { createdAt: 1 } }, // Oldest first
-        {
-          $lookup: {
-            from: "orderItems",
-            localField: "_id",
-            foreignField: "orderId",
-            as: "orderItems",
-          },
-        },
-        {
-          $lookup: {
-            from: "products",
-            localField: "orderItems.productId",
-            foreignField: "_id",
-            as: "productData",
-          },
-        },
-      ])
-      .exec();
-
-    if (!orders || orders.length === 0) {
-      return [];
-    }
-
-    // Group orders by tableId
-    const groupedByTable: { [key: string]: any } = {};
-
-    orders.forEach((order: any) => {
-      const tableId = order.tableId.toString();
-
-      if (!groupedByTable[tableId]) {
-        // First order for this table - create grouped order
-        groupedByTable[tableId] = {
-          _id: order.tableId, // Use tableId as identifier
-          tableId: order.tableId,
-          tableNumber: order.tableNumber,
-          restaurantId: order.restaurantId,
-          // Combine all orders from this table
-          orders: [order],
-          // Combined totals
-          totalOrders: 1,
-          combinedTotal: order.orderTotal,
-          // Status info
-          hasPendingPayment: order.paymentStatus === PaymentStatus.PENDING,
-          hasReadyOrders: order.orderStatus === OrderStatus.READY,
-          // Timestamps
-          firstOrderAt: order.createdAt,
-          lastOrderAt: order.updatedAt,
-        };
-      } else {
-        // Add this order to existing table group
-        groupedByTable[tableId].orders.push(order);
-        groupedByTable[tableId].totalOrders += 1;
-        groupedByTable[tableId].combinedTotal += order.orderTotal;
-
-        // Update flags
-        if (order.paymentStatus === PaymentStatus.PENDING) {
-          groupedByTable[tableId].hasPendingPayment = true;
-        }
-        if (order.orderStatus === OrderStatus.READY) {
-          groupedByTable[tableId].hasReadyOrders = true;
-        }
-
-        // Update timestamps
-        if (order.createdAt < groupedByTable[tableId].firstOrderAt) {
-          groupedByTable[tableId].firstOrderAt = order.createdAt;
-        }
-        if (order.updatedAt > groupedByTable[tableId].lastOrderAt) {
-          groupedByTable[tableId].lastOrderAt = order.updatedAt;
-        }
-      }
-    });
-
-    // Convert to array and sort by first order time
-    const result = Object.values(groupedByTable).sort((a: any, b: any) => {
-      return a.firstOrderAt - b.firstOrderAt;
-    });
-
-    return result;
-  }
-
+  /**
+   * Get active order for a table (most recent)
+   * Returns null if no active order exists
+   */
   public async getOrderByTable(tableId: ObjectId | string): Promise<Order | null> {
     const id = shapeIntoMongooseObjectId(tableId);
 
@@ -730,82 +366,6 @@ class OrderService {
         }
       })
       .sort({ createdAt: -1 }) // Get most recent order
-      .exec();
-
-    return result;
-  }
-
-  public async getActiveOrdersByTable(tableId: ObjectId | string): Promise<Order[]> {
-    const id = shapeIntoMongooseObjectId(tableId);
-
-    const result = await this.orderModel
-      .find({
-        tableId: id,
-        orderStatus: {
-          $nin: [OrderStatus.COMPLETED, OrderStatus.CANCELLED]
-        }
-      })
-      .sort({ createdAt: -1 })
-      .exec();
-
-    return result;
-  }
-
-  /**
-   * Get all orders for a table (order history - including completed/cancelled)
-   */
-  public async getAllOrdersByTable(tableId: ObjectId | string, filter?: string): Promise<Order[]> {
-    const id = shapeIntoMongooseObjectId(tableId);
-
-    // Build match condition based on filter
-    const matchCondition: any = { tableId: id };
-
-    if (filter) {
-      switch (filter.toLowerCase()) {
-        case "paid":
-        case "verified":
-          // Payment made (VERIFIED)
-          matchCondition.paymentStatus = PaymentStatus.VERIFIED;
-          matchCondition.orderStatus = { $ne: OrderStatus.CANCELLED };
-          break;
-        case "unpaid":
-        case "pending":
-          // Payment not made (PENDING)
-          matchCondition.paymentStatus = PaymentStatus.PENDING;
-          matchCondition.orderStatus = { $ne: OrderStatus.CANCELLED };
-          break;
-        case "cancelled":
-        case "cancel":
-          // Cancelled orders
-          matchCondition.orderStatus = OrderStatus.CANCELLED;
-          break;
-        default:
-          // No filter - return all orders
-          break;
-      }
-    }
-
-    const result = await this.orderModel
-      .aggregate([
-        { $match: matchCondition },
-        { $sort: { createdAt: -1 } }, // Most recent first
-        {
-          $lookup: {
-            from: "orderItems",
-            localField: "_id",
-            foreignField: "orderId",
-            as: "orderItems",
-          },
-        },
-        {
-          $lookup: {
-            from: "products",
-            localField: "orderItems.productId",
-            foreignField: "_id",
-            as: "productData",
-          },
-        },
-      ])
       .exec();
 
     return result;
