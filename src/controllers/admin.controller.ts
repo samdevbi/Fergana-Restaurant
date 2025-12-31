@@ -105,6 +105,35 @@ adminController.getRevenue = async (req: ExtendedRequest, res: Response) => {
 };
 
 /**
+ * Get popular items
+ * Requires: JWT authentication + OWNER role
+ */
+adminController.getPopularItems = async (req: ExtendedRequest, res: Response) => {
+    try {
+        console.log("getPopularItems");
+        const limit = Number(req.query.limit) || 10;
+
+        // Get restaurant owner (restaurantId)
+        const restaurant = await memberService.getRestaurant();
+        const restaurantId = restaurant._id;
+
+        // Get all products
+        const products = await productService.getAllProduct();
+
+        // For now, return all products
+        // TODO: Implement popularity calculation based on order history
+        res.status(HttpCode.OK).json({
+            items: products.slice(0, limit),
+            count: products.length,
+        });
+    } catch (err) {
+        console.log("Error, getPopularItems:", err);
+        if (err instanceof Errors) res.status(err.code).json(err);
+        else res.status(Errors.standard.code).json(Errors.standard);
+    }
+};
+
+/**
  * Get all tables
  * Requires: JWT authentication + OWNER role
  */

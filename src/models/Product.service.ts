@@ -76,6 +76,14 @@ class ProductService {
         if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
         return result;
     }
+
+    public async getAllProduct(): Promise<Product[]> {
+        const result = await this.productModel.find({ productStatus: ProductStatus.PROCESS }).exec();
+        if (!result || result.length === 0) {
+            return [];
+        }
+        return result;
+    }
 }
 
 
