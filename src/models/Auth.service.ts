@@ -4,10 +4,15 @@ import { Member } from "../libs/types/member";
 import jwt from "jsonwebtoken";
 
 class AuthService {
-    private readonly secretToken;
+    private readonly secretToken: string;
 
     constructor() {
-        this.secretToken = process.env.SECRET_TOKEN as string;
+        const token = process.env.SECRET_TOKEN;
+        if (!token) {
+            console.error("ERROR: SECRET_TOKEN environment variable is not set!");
+            process.exit(1);
+        }
+        this.secretToken = token;
     }
 
     public async createToken(payload: Member) {

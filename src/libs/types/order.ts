@@ -23,6 +23,11 @@ export interface Order {
     orderType: OrderType;
     paymentStatus: PaymentStatus;
     paymentMethod?: string;
+    completedBy?: ObjectId;
+    completedAt?: Date;
+    cancellationReason?: string;
+    verifiedBy?: ObjectId;
+    verifiedAt?: Date;
     createdAt: Date;
     updatedAt: Date;
     /* from aggregations */
@@ -47,14 +52,6 @@ export interface OrderCreateInput {
     tableId: string;
     items: OrderItemInput[];
     hasPermission?: boolean;
-}
-
-export interface OrderUpdateInput {
-    orderId: string;
-    action: "update-status" | "complete" | "cancel" | "modify-items";
-    orderStatus?: OrderStatus;
-    items?: OrderItemInput[];
-    reason?: string;
 }
 
 export interface PaymentVerificationInput {

@@ -68,28 +68,65 @@ router.post(
 
 
 
-/* Service Staff Routes (JWT + SERVICE/OWNER role) */
+/*  Staff Routes (JWT + SERVICE/OWNER role) */
 router.get(
-    "/staff/table/:tableId/activeOrder",
+    "/staff/order/:tableId/activeOrder",
     memberController.verifyAuth,
     verifyServiceStaff,
-    serviceController.getTableActiveOrder
+    orderController.getOrderByStaff
 );
 
 router.post(
-    "/staff/order/update",
+    "/orders/:id/items",
     memberController.verifyAuth,
     verifyServiceStaff,
-    orderController.updateOrder
+    orderController.upsertOrderItem
+);
+router.delete(
+    "/orders/:id/items/:itemId",
+    memberController.verifyAuth,
+    verifyServiceStaff,
+    orderController.deleteOrderItem
+);
+router.post(
+    "/orders/:id/complete",
+    memberController.verifyAuth,
+    verifyServiceStaff,
+    orderController.completeOrder
+);
+router.post(
+    "/orders/:id/cancel",
+    memberController.verifyAuth,
+    verifyServiceStaff,
+    orderController.cancelOrder
 );
 
-/* Owner/Admin Routes (JWT + OWNER role) */
+/* Owner order Routes (JWT + OWNER role) */
 
 router.get(
-    "/admin/service/table/:tableId/activeOrder",
+    "/admin/order/:tableId/activeOrder",
     memberController.verifyAuth,
     verifyOwner,
-    serviceController.getTableActiveOrder
+    orderController.getOrderByStaff
+);
+
+router.delete(
+    "/admin/orders/:id/items/:itemId",
+    memberController.verifyAuth,
+    verifyServiceStaff,
+    orderController.deleteOrderItem
+);
+router.post(
+    "/admin/orders/:id/complete",
+    memberController.verifyAuth,
+    verifyServiceStaff,
+    orderController.completeOrder
+);
+router.post(
+    "/admin/orders/:id/cancel",
+    memberController.verifyAuth,
+    verifyServiceStaff,
+    orderController.cancelOrder
 );
 
 /* Admin - Products */
@@ -106,12 +143,7 @@ router.get(
     verifyOwner,
     productController.getProducts
 );
-router.get(
-    "/admin/products/all",
-    memberController.verifyAuth,
-    verifyOwner,
-    productController.getAllProduct
-);
+
 router.get(
     "/admin/products/:id",
     memberController.verifyAuth,
@@ -119,13 +151,13 @@ router.get(
     productController.getProduct
 );
 router.put(
-    "/admin/products/:id",
+    "/admin/product/update/:id",
     memberController.verifyAuth,
     verifyOwner,
     productController.updateChosenProduct
 );
 router.delete(
-    "/admin/products/:id",
+    "/admin/product/delete/:id",
     memberController.verifyAuth,
     verifyOwner,
     productController.deleteProduct
@@ -139,19 +171,19 @@ router.get(
     adminController.getTables
 );
 router.post(
-    "/admin/tables",
+    "/admin/createTable",
     memberController.verifyAuth,
     verifyOwner,
     adminController.createTable
 );
 router.put(
-    "/admin/tables/:id",
+    "/admin/updateTable/:id",
     memberController.verifyAuth,
     verifyOwner,
     adminController.updateTable
 );
 router.delete(
-    "/admin/tables/:id",
+    "/admin/deleteTable/:id",
     memberController.verifyAuth,
     verifyOwner,
     adminController.deleteTable
@@ -159,19 +191,19 @@ router.delete(
 
 /* Admin - Staff */
 router.get(
-    "/admin/staff",
+    "/admin/getStaff",
     memberController.verifyAuth,
     verifyOwner,
     adminController.getStaff
 );
 router.post(
-    "/admin/staff",
+    "/admin/createStaff",
     memberController.verifyAuth,
     verifyOwner,
     adminController.createStaff
 );
 router.put(
-    "/admin/staff/:id",
+    "/admin/updateStaff/:id",
     memberController.verifyAuth,
     verifyOwner,
     adminController.updateStaff

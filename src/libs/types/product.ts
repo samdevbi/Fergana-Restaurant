@@ -1,5 +1,5 @@
 import { ObjectId } from "mongoose";
-import { ProductCollection, ProductSize, ProductStatus } from "../enums/product.enum";
+import { ProductCollection, ProductStatus } from "../enums/product.enum";
 
 
 export interface Product {

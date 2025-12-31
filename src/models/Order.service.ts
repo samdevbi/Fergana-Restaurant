@@ -2,7 +2,6 @@ import {
   Order,
   OrderInquiry,
   OrderItemInput,
-  OrderUpdateInput,
   OrderCreateInput,
   PaymentVerificationInput,
   OrderCompleteInput,
@@ -224,7 +223,7 @@ class OrderService {
 
       // Update table status (allow multiple orders, just mark as occupied if first order)
       if (table.status !== TableStatus.OCCUPIED) {
-        await this.tableService.occupyTable(tableId, newOrderId);
+        await this.tableService.updateTable(tableId, { status: TableStatus.OCCUPIED });
       }
 
       // Get full new order with items (for kitchen)
@@ -440,6 +439,280 @@ class OrderService {
     }
 
     return result[0];
+  }
+
+  /**
+   * Upsert order item (Add or Update)
+   * If item doesn't exist, adds it. If exists, updates quantity.
+   */
+  public async upsertOrderItem(
+    orderId: string,
+    item: OrderItemInput
+  ): Promise<Order> {
+    const id = shapeIntoMongooseObjectId(orderId);
+    const productId = shapeIntoMongooseObjectId(item.productId);
+
+    // Get order to check if it exists and can be modified
+    const order = await this.orderModel.findById(id).exec();
+    if (!order) {
+      throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
+    }
+
+    // Can only modify READY or PROCESS orders
+    if (order.orderStatus !== OrderStatus.READY && order.orderStatus !== OrderStatus.PROCESS) {
+      throw new Errors(HttpCode.BAD_REQUEST, "Order must be in READY or PROCESS status to modify");
+    }
+
+    // Check if item already exists for this order
+    const existingItem = await this.orderItemModel.findOne({
+      orderId: id,
+      productId: productId,
+    }).exec();
+
+    if (existingItem) {
+      // Update quantity
+      existingItem.itemQuantity = item.itemQuantity;
+      await existingItem.save();
+    } else {
+      // Add new item
+      await this.orderItemModel.create({
+        orderId: id,
+        productId: productId,
+        itemQuantity: item.itemQuantity,
+        itemPrice: item.itemPrice,
+      });
+    }
+
+    // Recalculate order total
+    const allItems = await this.orderItemModel.find({ orderId: id }).exec();
+    const newTotal = allItems.reduce(
+      (sum, item) => sum + item.itemPrice * item.itemQuantity,
+      0
+    );
+
+    // Update order total
+    await this.orderModel.findByIdAndUpdate(
+      id,
+      { orderTotal: newTotal },
+      { new: true }
+    ).exec();
+
+    // Get full updated order
+    const fullOrder = await this.getOrderById(orderId);
+
+    // Notify kitchen
+    notifyKitchen(order.restaurantId, {
+      _id: orderId,
+      orderNumber: fullOrder.orderNumber,
+      tableNumber: fullOrder.tableNumber,
+      updatedOrder: fullOrder,
+      event: "order:items-modified",
+    });
+
+    // Notify service staff
+    notifyServiceStaff(order.restaurantId.toString(), "order:items-modified", {
+      orderId: orderId,
+      orderNumber: fullOrder.orderNumber,
+      tableNumber: fullOrder.tableNumber,
+      updatedTotal: newTotal,
+    });
+
+    return fullOrder;
+  }
+
+  /**
+   * Delete order item
+   */
+  public async deleteOrderItem(
+    orderId: string,
+    itemId: string
+  ): Promise<Order> {
+    const id = shapeIntoMongooseObjectId(orderId);
+    const itemIdObj = shapeIntoMongooseObjectId(itemId);
+
+    // Get order to check if it exists and can be modified
+    const order = await this.orderModel.findById(id).exec();
+    if (!order) {
+      throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
+    }
+
+    // Can only modify READY or PROCESS orders
+    if (order.orderStatus !== OrderStatus.READY && order.orderStatus !== OrderStatus.PROCESS) {
+      throw new Errors(HttpCode.BAD_REQUEST, "Order must be in READY or PROCESS status to modify");
+    }
+
+    // Check if item exists and belongs to this order
+    const item = await this.orderItemModel.findOne({
+      _id: itemIdObj,
+      orderId: id,
+    }).exec();
+
+    if (!item) {
+      throw new Errors(HttpCode.NOT_FOUND, "Order item not found");
+    }
+
+    // Delete item
+    await this.orderItemModel.findByIdAndDelete(itemIdObj).exec();
+
+    // Recalculate order total
+    const allItems = await this.orderItemModel.find({ orderId: id }).exec();
+    const newTotal = allItems.reduce(
+      (sum, item) => sum + item.itemPrice * item.itemQuantity,
+      0
+    );
+
+    // Update order total
+    await this.orderModel.findByIdAndUpdate(
+      id,
+      { orderTotal: newTotal },
+      { new: true }
+    ).exec();
+
+    // Get full updated order
+    const fullOrder = await this.getOrderById(orderId);
+
+    // Notify kitchen
+    notifyKitchen(order.restaurantId, {
+      _id: orderId,
+      orderNumber: fullOrder.orderNumber,
+      tableNumber: fullOrder.tableNumber,
+      updatedOrder: fullOrder,
+      event: "order:items-modified",
+    });
+
+    // Notify service staff
+    notifyServiceStaff(order.restaurantId.toString(), "order:items-modified", {
+      orderId: orderId,
+      orderNumber: fullOrder.orderNumber,
+      tableNumber: fullOrder.tableNumber,
+      updatedTotal: newTotal,
+    });
+
+    return fullOrder;
+  }
+
+  /**
+   * Complete order
+   */
+  public async completeOrder(
+    orderId: string,
+    staffId: ObjectId
+  ): Promise<Order> {
+    const id = shapeIntoMongooseObjectId(orderId);
+    const staffIdObj = shapeIntoMongooseObjectId(staffId);
+
+    // Get order to find tableId
+    const order = await this.orderModel.findById(id).exec();
+    if (!order) {
+      throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
+    }
+
+    // Update order status
+    const result = await this.orderModel.findByIdAndUpdate(
+      id,
+      {
+        orderStatus: OrderStatus.COMPLETED,
+        completedBy: staffIdObj,
+        completedAt: new Date(),
+      },
+      { new: true }
+    ).exec();
+
+    if (!result) {
+      throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
+    }
+
+    // Check if there are other active orders on this table
+    const activeOrders = await this.getOrderByTable(order.tableId);
+
+    // Only free table if no other active orders exist
+    if (!activeOrders) {
+      await this.tableService.updateTable(order.tableId, { status: TableStatus.ACTIVE });
+      emitTableUpdate(order.tableId, TableStatus.ACTIVE);
+    }
+
+    // Notify staff and owner about order completion
+    emitOrderStatusChange(
+      id,
+      OrderStatus.COMPLETED,
+      order.paymentStatus,
+      order.restaurantId,
+      order.tableId
+    );
+
+    // Get full order
+    const fullOrder = await this.getOrderById(orderId);
+
+    return fullOrder;
+  }
+
+  /**
+   * Cancel order
+   */
+  public async cancelOrder(
+    orderId: string,
+    staffId: ObjectId,
+    reason?: string
+  ): Promise<Order> {
+    const id = shapeIntoMongooseObjectId(orderId);
+    const staffIdObj = shapeIntoMongooseObjectId(staffId);
+
+    // Get order to find tableId
+    const order = await this.orderModel.findById(id).exec();
+    if (!order) {
+      throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
+    }
+
+    // Check if order can be cancelled
+    if (order.orderStatus === OrderStatus.COMPLETED) {
+      throw new Errors(HttpCode.BAD_REQUEST, "Cannot cancel completed order");
+    }
+
+    // Update order status
+    const result = await this.orderModel.findByIdAndUpdate(
+      id,
+      {
+        orderStatus: OrderStatus.CANCELLED,
+        cancellationReason: reason || "Cancelled by staff",
+      },
+      { new: true }
+    ).exec();
+
+    if (!result) {
+      throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
+    }
+
+    // Check if there are other active orders on this table
+    const activeOrders = await this.getOrderByTable(order.tableId);
+
+    // Only free table if no other active orders exist
+    if (!activeOrders) {
+      await this.tableService.updateTable(order.tableId, { status: TableStatus.ACTIVE });
+      emitTableUpdate(order.tableId, TableStatus.ACTIVE);
+    }
+
+    // Notify staff and owner about order cancellation
+    emitOrderStatusChange(
+      id,
+      OrderStatus.CANCELLED,
+      order.paymentStatus,
+      order.restaurantId,
+      order.tableId
+    );
+
+    // Also send specific cancellation notification
+    notifyServiceStaff(order.restaurantId.toString(), "order:cancelled", {
+      orderId: id.toString(),
+      orderNumber: order.orderNumber,
+      tableNumber: order.tableNumber,
+      orderStatus: OrderStatus.CANCELLED,
+      reason: reason || "Cancelled by staff",
+    });
+
+    // Get full order
+    const fullOrder = await this.getOrderById(orderId);
+
+    return fullOrder;
   }
 
 }
