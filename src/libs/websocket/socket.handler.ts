@@ -12,15 +12,10 @@ let io: SocketIOServer | null = null;
  * Initialize Socket.io server
  */
 export const initializeSocket = (httpServer: HTTPServer): SocketIOServer => {
-    // Support both dashboard and client URLs for WebSocket
-    const allowedOrigins = [];
-    if (process.env.FRONTEND_URL) allowedOrigins.push(process.env.FRONTEND_URL);
-    if (process.env.CLIENT_URL) allowedOrigins.push(process.env.CLIENT_URL);
-    if (allowedOrigins.length === 0) allowedOrigins.push("http://localhost:3000");
-
+    // Allow all origins for WebSocket
     io = new SocketIOServer(httpServer, {
         cors: {
-            origin: allowedOrigins,
+            origin: true, // Allow all origins (with credentials support)
             methods: ["GET", "POST"],
             credentials: true,
         },
