@@ -41,10 +41,42 @@ class ProductService {
 
     }
 
+    public async getProductsByAdmin(inquiry: ProductInquiry): Promise<Product[]> {
+        const match: T = {};
+
+        if (inquiry.productCollection)
+            match.productCollection = inquiry.productCollection;
+
+        if (inquiry.productStatus)
+            match.productStatus = inquiry.productStatus;
+
+        if (inquiry.search) {
+            match.$or = [
+                { productNameUz: { $regex: new RegExp(inquiry.search, "i") } },
+                { productNameKr: { $regex: new RegExp(inquiry.search, "i") } },
+            ];
+        }
+
+        const sort: T = inquiry.order === "productPrice" ? { [inquiry.order]: 1 } : { [inquiry.order]: -1 };
+
+        const result = await this.productModel
+            .aggregate([
+                { $match: match },
+                { $sort: sort },
+                { $skip: (inquiry.page * 1 - 1) * inquiry.limit },
+                { $limit: inquiry.limit * 1 },
+            ])
+            .exec();
+        if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
+
+        return result;
+
+    }
+
     public async getProduct(memberId: ObjectId | null, id: string): Promise<Product> {
         const productId = shapeIntoMongooseObjectId(id);
 
-        const result = await this.productModel.findOne({ _id: productId, productStatus: ProductStatus.PROCESS }).exec();
+        const result = await this.productModel.findOne({ _id: productId }).exec();
 
         if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
 
