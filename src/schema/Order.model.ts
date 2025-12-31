@@ -38,16 +38,10 @@ const orderSchema = new Schema(
             required: true,
         },
 
-        orderDelivery: {
-            type: Number,
-            required: false,
-            default: 0,
-        },
-
         orderStatus: {
             type: String,
             enum: OrderStatus,
-            default: OrderStatus.PENDING,
+            default: OrderStatus.PROCESS,
         },
 
         orderType: {

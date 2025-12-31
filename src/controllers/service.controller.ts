@@ -9,7 +9,6 @@ import {
     PaymentVerificationInput,
     OrderCompleteInput,
     OrderCancelInput,
-    OrderModifyItemsInput,
 } from "../libs/types/order";
 
 const orderService = new OrderService();
@@ -43,116 +42,6 @@ serviceController.getOrders = async (req: ExtendedRequest, res: Response) => {
     }
 };
 
-/**
- * Verify payment for order
- * Requires: JWT authentication + SERVICE/OWNER role
- */
-serviceController.verifyPayment = async (req: ExtendedRequest, res: Response) => {
-    try {
-        const { id } = req.params;
-        const input: PaymentVerificationInput = {
-            orderId: id,
-            paymentMethod: req.body.paymentMethod,
-            paymentProof: req.body.paymentProof,
-        };
-
-        if (!input.paymentMethod) {
-            throw new Errors(HttpCode.BAD_REQUEST, Errors.standard.message);
-        }
-
-        const result = await orderService.verifyPayment(
-            id,
-            req.member._id,
-            input
-        );
-
-        res.status(HttpCode.OK).json(result);
-    } catch (err) {
-        console.log("Error, verifyPayment:", err);
-        if (err instanceof Errors) res.status(err.code).json(err);
-        else res.status(Errors.standard.code).json(Errors.standard);
-    }
-};
-
-/**
- * Complete order
- * Requires: JWT authentication + SERVICE/OWNER role
- */
-serviceController.completeOrder = async (req: ExtendedRequest, res: Response) => {
-    try {
-        const { id } = req.params;
-        const input: OrderCompleteInput = {
-            orderId: id,
-        };
-
-        const result = await orderService.completeOrder(
-            id,
-            req.member._id
-        );
-
-        res.status(HttpCode.OK).json(result);
-    } catch (err) {
-        console.log("Error, completeOrder:", err);
-        if (err instanceof Errors) res.status(err.code).json(err);
-        else res.status(Errors.standard.code).json(Errors.standard);
-    }
-};
-
-/**
- * Cancel order
- * Requires: JWT authentication + SERVICE/OWNER role
- */
-serviceController.cancelOrder = async (req: ExtendedRequest, res: Response) => {
-    try {
-        const { id } = req.params;
-        const input: OrderCancelInput = {
-            orderId: id,
-            reason: req.body.reason,
-        };
-
-        const result = await orderService.cancelOrder(
-            id,
-            req.member._id,
-            input
-        );
-
-        res.status(HttpCode.OK).json(result);
-    } catch (err) {
-        console.log("Error, cancelOrder:", err);
-        if (err instanceof Errors) res.status(err.code).json(err);
-        else res.status(Errors.standard.code).json(Errors.standard);
-    }
-};
-
-/**
- * Modify order items
- * Requires: JWT authentication + SERVICE/OWNER role
- */
-serviceController.modifyOrderItems = async (req: ExtendedRequest, res: Response) => {
-    try {
-        const { id } = req.params;
-        const input: OrderModifyItemsInput = {
-            orderId: id,
-            items: req.body.items || [],
-        };
-
-        if (!input.items || input.items.length === 0) {
-            throw new Errors(HttpCode.BAD_REQUEST, Errors.standard.message);
-        }
-
-        const result = await orderService.modifyOrderItems(
-            id,
-            req.member._id,
-            input
-        );
-
-        res.status(HttpCode.OK).json(result);
-    } catch (err) {
-        console.log("Error, modifyOrderItems:", err);
-        if (err instanceof Errors) res.status(err.code).json(err);
-        else res.status(Errors.standard.code).json(Errors.standard);
-    }
-};
 
 /**
  * Get specific order details
@@ -190,6 +79,35 @@ serviceController.getTables = async (req: ExtendedRequest, res: Response) => {
         });
     } catch (err) {
         console.log("Error, getServiceTables:", err);
+        if (err instanceof Errors) res.status(err.code).json(err);
+        else res.status(Errors.standard.code).json(Errors.standard);
+    }
+};
+
+/**
+ * Get active order for a table
+ * Requires: JWT authentication + SERVICE/OWNER role
+ */
+serviceController.getTableActiveOrder = async (req: ExtendedRequest, res: Response) => {
+    try {
+        const { tableId } = req.params;
+
+        const activeOrder = await orderService.getOrderByTable(tableId);
+
+        if (!activeOrder) {
+            return res.status(HttpCode.OK).json({
+                activeOrder: null,
+                message: "No active order found for this table",
+            });
+        }
+
+        const fullOrder = await orderService.getOrderById(activeOrder._id.toString());
+
+        res.status(HttpCode.OK).json({
+            activeOrder: fullOrder,
+        });
+    } catch (err) {
+        console.log("Error, getTableActiveOrder:", err);
         if (err instanceof Errors) res.status(err.code).json(err);
         else res.status(Errors.standard.code).json(Errors.standard);
     }

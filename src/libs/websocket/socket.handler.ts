@@ -177,11 +177,8 @@ export const emitOrderStatusChange = (
         paymentStatus: paymentStatus,
     };
 
-    // Notify customer
-    notifyCustomer(orderIdStr, "order:status-changed", data);
-
-    // Notify kitchen if order is confirmed or preparing
-    if (orderStatus === OrderStatus.CONFIRMED || orderStatus === OrderStatus.PREPARING) {
+    // Notify kitchen if order is in process
+    if (orderStatus === OrderStatus.PROCESS) {
         notifyKitchen(restaurantId, { ...data, _id: orderIdStr });
     }
 

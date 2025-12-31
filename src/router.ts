@@ -9,6 +9,7 @@ import kitchenController from "./controllers/kitchen.controller";
 import serviceController from "./controllers/service.controller";
 import adminController from "./controllers/admin.controller";
 import { verifyKitchenStaff, verifyServiceStaff, verifyOwner } from "./libs/rbac/role.middleware";
+import { qrOrderRateLimiter } from "./libs/middleware/rateLimiter";
 
 /* Health Check */
 router.get("/health", (req: express.Request, res: express.Response) => {
@@ -42,53 +43,10 @@ router.post(
 
 
 
-/* Product */
-router.post(
-    "/product/createProduct",
-    memberController.verifyAuth,
-    verifyOwner,
-    makeUploader("products").single("productImage"),
-    productController.createNewProduct
-);
-
-router.get(
-    "/product/getAllProducts",
-    memberController.verifyAuth,
-    verifyOwner,
-    productController.getProducts
-);
-
-router.get(
-    "/product/getAllProduct",
-    memberController.verifyAuth,
-    verifyOwner,
-    productController.getAllProduct
-);
-
-router.get(
-    "/product/:id",
-    memberController.verifyAuth,
-    verifyOwner,
-    productController.getProduct
-);
-router.put(
-    "/product/updateProduct/:id",
-    memberController.verifyAuth,
-    verifyOwner,
-    productController.updateChosenProduct
-);
-router.delete(
-    "/product/productDelete/:id",
-    memberController.verifyAuth,
-    verifyOwner,
-    productController.deleteProduct
-);
 
 /* QR Customer Routes (Public - No Authentication) */
 router.get("/qr/:tableId/getMenu", qrController.getMenu);
-router.post("/qr/:tableId/createOrder", qrController.createOrder);
-router.get("/qr/order/:orderId/getOrderStatus", qrController.getOrderStatus);
-router.get("/qr/order/:orderId/getOrderDetails", qrController.getOrderDetails);
+router.post("/qr/:tableId/createOrder", qrOrderRateLimiter, qrController.createOrder);
 
 /* Kitchen Staff Routes (JWT + KITCHEN role) */
 router.get(
@@ -108,97 +66,94 @@ router.get(
 
 /* Service Staff Routes (JWT + SERVICE/OWNER role) */
 router.get(
-    "/staff/service/getOrders",
+    "/staff/table/:tableId/activeOrder",
     memberController.verifyAuth,
     verifyServiceStaff,
-    serviceController.getOrders
+    serviceController.getTableActiveOrder
 );
-router.get(
-    "/staff/service/getOrder/:id",
-    memberController.verifyAuth,
-    verifyServiceStaff,
-    serviceController.getOrder
-);
+
 router.post(
-    "/staff/service/order/:id/verify-payment",
+    "/staff/order/update",
     memberController.verifyAuth,
     verifyServiceStaff,
-    serviceController.verifyPayment
-);
-router.post(
-    "/staff/service/order/:id/complete",
-    memberController.verifyAuth,
-    verifyServiceStaff,
-    serviceController.completeOrder
-);
-router.post(
-    "/staff/service/order/:id/cancel",
-    memberController.verifyAuth,
-    verifyServiceStaff,
-    serviceController.cancelOrder
-);
-router.put(
-    "/staff/service/order/:id/modifyItems",
-    memberController.verifyAuth,
-    verifyServiceStaff,
-    serviceController.modifyOrderItems
-);
-router.get(
-    "/staff/service/getTables",
-    memberController.verifyAuth,
-    verifyServiceStaff,
-    serviceController.getTables
-);
-router.get(
-    "/staff/service/table/:tableId/history",
-    memberController.verifyAuth,
-    verifyServiceStaff,
-    serviceController.getTableWithHistory
+    orderController.updateOrder
 );
 
 /* Owner/Admin Routes (JWT + OWNER role) */
+
 router.get(
-    "/admin/analytics/getDashboard",
+    "/admin/service/table/:tableId/activeOrder",
     memberController.verifyAuth,
     verifyOwner,
-    adminController.getDashboard
+    serviceController.getTableActiveOrder
 );
-router.get(
-    "/admin/analytics/getRevenue",
+
+/* Admin - Products */
+router.post(
+    "/admin/products/create",
     memberController.verifyAuth,
     verifyOwner,
-    adminController.getRevenue
+    makeUploader("products").single("productImage"),
+    productController.createNewProduct
 );
 router.get(
-    "/admin/analytics/getPopularitems",
+    "/admin/products",
     memberController.verifyAuth,
     verifyOwner,
-    adminController.getPopularItems
+    productController.getProducts
 );
 router.get(
-    "/admin/getTables",
+    "/admin/products/all",
+    memberController.verifyAuth,
+    verifyOwner,
+    productController.getAllProduct
+);
+router.get(
+    "/admin/products/:id",
+    memberController.verifyAuth,
+    verifyOwner,
+    productController.getProduct
+);
+router.put(
+    "/admin/products/:id",
+    memberController.verifyAuth,
+    verifyOwner,
+    productController.updateChosenProduct
+);
+router.delete(
+    "/admin/products/:id",
+    memberController.verifyAuth,
+    verifyOwner,
+    productController.deleteProduct
+);
+
+/* Admin - Tables */
+router.get(
+    "/admin/tables",
     memberController.verifyAuth,
     verifyOwner,
     adminController.getTables
 );
 router.post(
-    "/admin/createTable",
+    "/admin/tables",
     memberController.verifyAuth,
     verifyOwner,
     adminController.createTable
 );
 router.put(
-    "/admin/updateTables/:id",
+    "/admin/tables/:id",
     memberController.verifyAuth,
     verifyOwner,
     adminController.updateTable
 );
 router.delete(
-    "/admin/deleteTable/:id",
+    "/admin/tables/:id",
     memberController.verifyAuth,
     verifyOwner,
     adminController.deleteTable
 );
+
+/* Admin - Staff */
 router.get(
     "/admin/staff",
     memberController.verifyAuth,
@@ -206,16 +161,36 @@ router.get(
     adminController.getStaff
 );
 router.post(
-    "/admin/createStaff",
+    "/admin/staff",
     memberController.verifyAuth,
     verifyOwner,
     adminController.createStaff
 );
 router.put(
-    "/admin/updateStaff/:id",
+    "/admin/staff/:id",
     memberController.verifyAuth,
     verifyOwner,
     adminController.updateStaff
+);
+
+/* Admin - Analytics */
+router.get(
+    "/admin/analytics/dashboard",
+    memberController.verifyAuth,
+    verifyOwner,
+    adminController.getDashboard
+);
+router.get(
+    "/admin/analytics/revenue",
+    memberController.verifyAuth,
+    verifyOwner,
+    adminController.getRevenue
+);
+router.get(
+    "/admin/analytics/popular-items",
+    memberController.verifyAuth,
+    verifyOwner,
+    adminController.getPopularItems
 );
 
 export default router;

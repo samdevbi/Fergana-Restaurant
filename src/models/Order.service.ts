@@ -7,7 +7,6 @@ import {
   PaymentVerificationInput,
   OrderCompleteInput,
   OrderCancelInput,
-  OrderModifyItemsInput,
   OrderConfirmationResponse,
 } from "../libs/types/order";
 import { Member } from "../libs/types/member";
@@ -21,10 +20,8 @@ import { OrderStatus, PaymentStatus, OrderType } from "../libs/enums/order.enum"
 import MemberService from "./Member.service";
 import TableService from "./Table.service";
 import {
-  emitOrderUpdate,
   notifyKitchen,
   notifyServiceStaff,
-  notifyCustomer,
   emitTableUpdate,
   emitOrderStatusChange,
 } from "../libs/websocket/socket.handler";
@@ -58,12 +55,10 @@ class OrderService {
     const amount = input.reduce((accumlator: number, item: OrderItemInput) => {
       return accumlator + item.itemPrice * item.itemQuantity;
     }, 0);
-    const delivery = amount < 100 ? 5 : 0;
 
     try {
       const newOrder: Order = await this.orderModel.create({
-        orderTotal: amount + delivery,
-        orderDelivery: delivery,
+        orderTotal: amount,
         memberId: memberId,
       });
       const orderId = newOrder._id;
@@ -186,25 +181,134 @@ class OrderService {
   ): Promise<Order> {
     const memberId = shapeIntoMongooseObjectId(member._id);
     const orderId = shapeIntoMongooseObjectId(input.orderId);
-    const orderStatus = input.orderStatus;
 
-    const result = await this.orderModel.findOneAndUpdate(
-      {
-        memberId: memberId,
-        _id: orderId,
-      },
-      { orderStatus: orderStatus },
-      { new: true }
-    ).exec();
+    if (!input.action) {
+      throw new Errors(HttpCode.BAD_REQUEST, "Action is required (update-status, complete, cancel, modify-items)");
+    }
 
-    if (!result) throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
+    let result: Order;
 
-    return result;
+    switch (input.action) {
+      case "update-status":
+        if (!input.orderStatus) {
+          throw new Errors(HttpCode.BAD_REQUEST, "orderStatus is required for update-status action");
+        }
+
+        // For members, only allow updating their own orders
+        result = await this.orderModel.findOneAndUpdate(
+          {
+            memberId: memberId,
+            _id: orderId,
+          },
+          { orderStatus: input.orderStatus },
+          { new: true }
+        ).exec();
+
+        if (!result) throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
+
+        // Emit status change notification
+        emitOrderStatusChange(
+          orderId,
+          input.orderStatus,
+          result.paymentStatus,
+          result.restaurantId,
+          result.tableId
+        );
+
+        return result;
+
+      case "complete":
+        // Staff can complete any order
+        result = await this.completeOrder(orderId.toString(), memberId);
+        return result;
+
+      case "cancel":
+        // Staff can cancel any order
+        const cancelInput: OrderCancelInput = {
+          orderId: orderId.toString(),
+          reason: input.reason,
+        };
+        result = await this.cancelOrder(orderId.toString(), memberId, cancelInput);
+        return result;
+
+      case "modify-items":
+        if (!input.items || input.items.length === 0) {
+          throw new Errors(HttpCode.BAD_REQUEST, "items are required for modify-items action");
+        }
+
+        // Check order exists and can be modified
+        const modifyOrder = await this.orderModel.findById(orderId).exec();
+        if (!modifyOrder) {
+          throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
+        }
+
+        // Can only modify if PROCESS
+        if (modifyOrder.orderStatus !== OrderStatus.PROCESS) {
+          throw new Errors(HttpCode.BAD_REQUEST, Message.UPDATE_FAILED);
+        }
+
+        // Get existing order items to calculate current total
+        const existingItems = await this.orderItemModel.find({ orderId: orderId }).exec();
+        const existingTotal = existingItems.reduce((sum, item) => sum + item.itemPrice * item.itemQuantity, 0);
+
+        // Add new items to existing order
+        await this.recordOrderItem(orderId, input.items);
+
+        // Calculate new items total
+        const newItemsTotal = input.items.reduce((accumulator: number, item: OrderItemInput) => {
+          return accumulator + item.itemPrice * item.itemQuantity;
+        }, 0);
+
+        // Calculate total: existing items + new items
+        const newTotal = existingTotal + newItemsTotal;
+
+        // Update order total
+        result = await this.orderModel.findByIdAndUpdate(
+          orderId,
+          {
+            orderTotal: newTotal,
+          },
+          { new: true }
+        ).exec();
+
+        if (!result) {
+          throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
+        }
+
+        // Get full order with all items
+        const fullOrder = await this.getOrderById(orderId.toString());
+
+        // Notify kitchen if order is in process
+        if (modifyOrder.orderStatus === OrderStatus.PROCESS) {
+          notifyKitchen(modifyOrder.restaurantId, {
+            _id: orderId.toString(),
+            orderNumber: fullOrder.orderNumber,
+            tableNumber: fullOrder.tableNumber,
+            newItems: input.items,
+            updatedOrder: fullOrder,
+            event: "order:items-added",
+          });
+        }
+
+        // Notify service staff and owner about order modification
+        notifyServiceStaff(modifyOrder.restaurantId.toString(), "order:items-added", {
+          orderId: orderId.toString(),
+          orderNumber: modifyOrder.orderNumber,
+          tableNumber: modifyOrder.tableNumber,
+          newItems: input.items,
+          updatedTotal: result.orderTotal,
+        });
+
+        return fullOrder;
+
+      default:
+        throw new Errors(HttpCode.BAD_REQUEST, `Invalid action: ${input.action}. Use: update-status, complete, cancel, modify-items`);
+    }
   }
 
   // QR Order Methods
 
-  public async createQROrder(input: OrderCreateInput): Promise<Order | OrderConfirmationResponse> {
+  public async createQROrder(input: OrderCreateInput): Promise<Order> {
     const tableId = shapeIntoMongooseObjectId(input.tableId);
 
     // Get table info
@@ -214,143 +318,106 @@ class OrderService {
     // Check if there's an existing active order on this table
     const existingOrder = await this.getOrderByTable(tableId);
 
-    // If adding to existing order
-    if (input.isAddingToExisting && input.existingOrderId) {
-      const existingOrderId = shapeIntoMongooseObjectId(input.existingOrderId);
-      const order = await this.orderModel.findById(existingOrderId).exec();
-
-      if (!order || order.tableId.toString() !== tableId.toString()) {
-        throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
-      }
-
-      // Add items to existing order
-      await this.recordOrderItem(existingOrderId, input.items);
-
-      // Recalculate total
-      const existingItems = await this.orderItemModel.find({ orderId: existingOrderId }).exec();
-      const newAmount = existingItems.reduce((sum, item) => sum + item.itemPrice * item.itemQuantity, 0);
-
-      const updatedOrder = await this.orderModel.findByIdAndUpdate(
-        existingOrderId,
-        { orderTotal: newAmount },
-        { new: true }
-      ).exec();
-
-      const fullOrder = await this.getOrderById(existingOrderId.toString());
-
-      // Emit WebSocket events
-      // Notify customer
-      emitOrderUpdate(existingOrderId.toString(), "order:item-added", {
-        orderId: existingOrderId.toString(),
-        newItems: input.items,
-      });
-
-      // Notify kitchen if order is confirmed or preparing
-      if (order.orderStatus === OrderStatus.CONFIRMED || order.orderStatus === OrderStatus.PREPARING) {
-        notifyKitchen(order.restaurantId, {
-          _id: existingOrderId.toString(),
-          orderNumber: fullOrder.orderNumber,
-          tableNumber: fullOrder.tableNumber,
-          newItems: input.items,
-          updatedOrder: fullOrder,
-          event: "order:items-added",
-        });
-      }
-
-      // Notify service staff
-      notifyServiceStaff(order.restaurantId, "order:items-added", {
-        orderId: existingOrderId.toString(),
-        orderNumber: fullOrder.orderNumber,
-        tableNumber: fullOrder.tableNumber,
-        newItems: input.items,
-        updatedTotal: fullOrder.orderTotal,
-      });
-
-      return fullOrder;
-    }
-
-    // If table has active order and customer didn't confirm, ask for confirmation
-    // But allow creating new order if customer wants separate order
-    // Skip confirmation if customer has given permission
-    if (existingOrder && !input.isAddingToExisting && !input.existingOrderId && !input.hasPermission) {
-      const existingOrderDetails = await this.getOrderById(existingOrder._id.toString());
-
-      // If table is not ACTIVE, ask for permission
-      if (table.status !== TableStatus.ACTIVE) {
-        return {
-          needsConfirmation: true,
-          needsPermission: true,
-          message: "This table has existing orders. Do you want to create a new order on this table?",
-          existingOrder: existingOrderDetails,
-        };
-      }
-
-      return {
-        needsConfirmation: true,
-        existingOrder: existingOrderDetails,
-      };
-    }
-
-    // If customer explicitly wants new order (not adding to existing), create it
     // Calculate order total
     const amount = input.items.reduce((accumulator: number, item: OrderItemInput) => {
       return accumulator + item.itemPrice * item.itemQuantity;
     }, 0);
-    const delivery = 0; // No delivery fee for dine-in QR orders
 
     // Generate daily order number
     const orderNumber = await this.generateDailyOrderNumber(restaurantId);
 
     try {
+      // Create NEW order for kitchen (always create new order)
       const newOrder: Order = await this.orderModel.create({
         orderNumber: orderNumber,
         restaurantId: restaurantId,
         tableId: tableId,
         tableNumber: table.tableNumber,
-        orderTotal: amount + delivery,
-        orderDelivery: delivery,
-        orderStatus: OrderStatus.PENDING,
+        orderTotal: amount,
+        orderStatus: OrderStatus.PROCESS,
         orderType: OrderType.QR_ORDER,
         paymentStatus: PaymentStatus.PENDING,
         memberId: null, // Anonymous order
       });
 
-      const orderId = newOrder._id;
+      const newOrderId = newOrder._id;
 
-      // Record order items
-      await this.recordOrderItem(orderId, input.items);
+      // Record order items for new order (kitchen will see this)
+      await this.recordOrderItem(newOrderId, input.items);
 
-      // Update table status (allow multiple orders, just mark as occupied if first order)
-      // Check if table is already occupied
-      if (table.status !== TableStatus.OCCUPIED) {
-        await this.tableService.occupyTable(tableId, orderId);
+      // If there's an existing active order, add items to it for staff/owner
+      if (existingOrder) {
+        // Add items to existing order (for staff/owner view)
+        await this.recordOrderItem(existingOrder._id, input.items);
+
+        // Recalculate existing order total
+        const existingItems = await this.orderItemModel.find({ orderId: existingOrder._id }).exec();
+        const newTotal = existingItems.reduce((sum, item) => sum + item.itemPrice * item.itemQuantity, 0);
+
+        // Update existing order total
+        await this.orderModel.findByIdAndUpdate(
+          existingOrder._id,
+          { orderTotal: newTotal },
+          { new: true }
+        ).exec();
+
+        // Get updated existing order
+        const updatedExistingOrder = await this.getOrderById(existingOrder._id.toString());
+
+        // Notify staff/owner that items were added to existing order
+        notifyServiceStaff(restaurantId.toString(), "order:items-added", {
+          orderId: existingOrder._id.toString(),
+          orderNumber: updatedExistingOrder.orderNumber,
+          tableNumber: updatedExistingOrder.tableNumber,
+          newItems: input.items,
+          updatedTotal: newTotal,
+        });
+      } else {
+        // No existing order - notify staff/owner about new order
+        notifyServiceStaff(restaurantId.toString(), "order:new", {
+          orderId: newOrderId.toString(),
+          orderNumber: newOrder.orderNumber,
+          tableNumber: newOrder.tableNumber,
+          orderStatus: newOrder.orderStatus,
+          paymentStatus: newOrder.paymentStatus,
+          orderTotal: newOrder.orderTotal,
+          items: input.items,
+        });
+
+        // Notify about payment verification needed
+        notifyServiceStaff(restaurantId.toString(), "payment:needs-verification", {
+          orderId: newOrderId.toString(),
+          orderNumber: newOrder.orderNumber,
+          tableNumber: newOrder.tableNumber,
+          orderTotal: newOrder.orderTotal,
+          paymentStatus: newOrder.paymentStatus,
+        });
       }
 
-      // Get full order with items
-      const fullOrder = await this.getOrderById(orderId.toString());
+      // Update table status (allow multiple orders, just mark as occupied if first order)
+      if (table.status !== TableStatus.OCCUPIED) {
+        await this.tableService.occupyTable(tableId, newOrderId);
+      }
 
-      // Emit WebSocket events
-      notifyCustomer(orderId.toString(), "order:created", {
-        orderId: orderId.toString(),
-        orderNumber: fullOrder.orderNumber,
-        orderStatus: fullOrder.orderStatus,
+      // Get full new order with items (for kitchen)
+      const fullNewOrder = await this.getOrderById(newOrderId.toString());
+
+      // Notify kitchen about new order (always send new order to kitchen)
+      notifyKitchen(restaurantId, {
+        _id: newOrderId.toString(),
+        orderNumber: fullNewOrder.orderNumber,
+        tableNumber: fullNewOrder.tableNumber,
+        orderStatus: fullNewOrder.orderStatus,
+        paymentStatus: fullNewOrder.paymentStatus,
+        orderTotal: fullNewOrder.orderTotal,
+        items: fullNewOrder.orderItems,
+        event: "order:new",
       });
 
-      // Notify service staff and owner about new order
-      notifyServiceStaff(restaurantId.toString(), "order:new", {
-        orderId: orderId.toString(),
-        orderNumber: fullOrder.orderNumber,
-        tableNumber: fullOrder.tableNumber,
-        orderStatus: fullOrder.orderStatus,
-        paymentStatus: fullOrder.paymentStatus,
-        orderTotal: fullOrder.orderTotal,
-        items: fullOrder.orderItems,
-      });
+      emitTableUpdate(tableId, TableStatus.OCCUPIED, newOrderId);
 
-      notifyServiceStaff(restaurantId.toString(), "payment:needs-verification", fullOrder);
-      emitTableUpdate(tableId, TableStatus.OCCUPIED, orderId);
-
-      return fullOrder;
+      // Return new order (for kitchen)
+      return fullNewOrder;
     } catch (err) {
       console.log("Error, model: createQROrder", err);
       throw new Errors(HttpCode.BAD_REQUEST, Message.CREATE_FAILED);
@@ -380,7 +447,7 @@ class OrderService {
       id,
       {
         paymentStatus: PaymentStatus.VERIFIED,
-        orderStatus: OrderStatus.CONFIRMED,
+        orderStatus: OrderStatus.PROCESS,
         paymentMethod: input.paymentMethod,
         verifiedBy: staffIdObj,
         verifiedAt: new Date(),
@@ -395,7 +462,7 @@ class OrderService {
     // Emit WebSocket events
     emitOrderStatusChange(
       id,
-      OrderStatus.CONFIRMED,
+      OrderStatus.PROCESS,
       PaymentStatus.VERIFIED,
       order.restaurantId,
       order.tableId
@@ -441,12 +508,6 @@ class OrderService {
       await this.tableService.freeTable(order.tableId);
       emitTableUpdate(order.tableId, TableStatus.ACTIVE);
     }
-
-    // Emit WebSocket events
-    notifyCustomer(id, "order:completed", {
-      orderId: id,
-      orderStatus: OrderStatus.COMPLETED,
-    });
 
     // Notify staff and owner about order completion
     emitOrderStatusChange(
@@ -502,13 +563,6 @@ class OrderService {
       emitTableUpdate(order.tableId, TableStatus.ACTIVE);
     }
 
-    // Emit WebSocket events
-    notifyCustomer(id, "order:cancelled", {
-      orderId: id,
-      orderStatus: OrderStatus.CANCELLED,
-      reason: input.reason,
-    });
-
     // Notify staff and owner about order cancellation
     emitOrderStatusChange(
       id,
@@ -530,85 +584,6 @@ class OrderService {
     return result;
   }
 
-  public async modifyOrderItems(
-    orderId: string,
-    staffId: ObjectId,
-    input: OrderModifyItemsInput
-  ): Promise<Order> {
-    const id = shapeIntoMongooseObjectId(orderId);
-
-    // Check order exists and can be modified
-    const order = await this.orderModel.findById(id).exec();
-    if (!order) {
-      throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
-    }
-
-    // Can only modify if PENDING or CONFIRMED
-    if (order.orderStatus !== OrderStatus.PENDING && order.orderStatus !== OrderStatus.CONFIRMED) {
-      throw new Errors(HttpCode.BAD_REQUEST, Message.UPDATE_FAILED);
-    }
-
-    // Get existing order items to calculate current total
-    const existingItems = await this.orderItemModel.find({ orderId: id }).exec();
-    const existingTotal = existingItems.reduce((sum, item) => sum + item.itemPrice * item.itemQuantity, 0);
-
-    // Add new items to existing order (don't delete existing items)
-    await this.recordOrderItem(id, input.items);
-
-    // Calculate new items total
-    const newItemsTotal = input.items.reduce((accumulator: number, item: OrderItemInput) => {
-      return accumulator + item.itemPrice * item.itemQuantity;
-    }, 0);
-
-    // Calculate total: existing items + new items
-    const newTotal = existingTotal + newItemsTotal;
-
-    // Update order total
-    const result = await this.orderModel.findByIdAndUpdate(
-      id,
-      {
-        orderTotal: newTotal + (order.orderDelivery || 0),
-      },
-      { new: true }
-    ).exec();
-
-    if (!result) {
-      throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
-    }
-
-    // Get full order with all items
-    const fullOrder = await this.getOrderById(id.toString());
-
-    // Emit WebSocket event
-    emitOrderUpdate(id, "order:items-added", {
-      orderId: id,
-      newItems: input.items,
-      updatedTotal: result.orderTotal,
-    });
-
-    // Notify kitchen if order is confirmed or preparing
-    if (order.orderStatus === OrderStatus.CONFIRMED || order.orderStatus === OrderStatus.PREPARING) {
-      notifyKitchen(order.restaurantId, {
-        _id: id.toString(),
-        orderNumber: fullOrder.orderNumber,
-        tableNumber: fullOrder.tableNumber,
-        newItems: input.items,
-        updatedOrder: fullOrder,
-        event: "order:items-added",
-      });
-    }
-
-    // Notify service staff and owner about order modification
-    notifyServiceStaff(order.restaurantId, "order:items-added", {
-      orderId: id,
-      orderNumber: order.orderNumber,
-      tableNumber: order.tableNumber,
-      newItems: input.items,
-      updatedTotal: result.orderTotal,
-    });
-
-    return fullOrder;
-  }
 
   public async getKitchenOrders(restaurantId: ObjectId | string): Promise<Order[]> {
     const id = shapeIntoMongooseObjectId(restaurantId);
@@ -618,9 +593,7 @@ class OrderService {
         {
           $match: {
             restaurantId: id,
-            orderStatus: {
-              $in: [OrderStatus.CONFIRMED, OrderStatus.PREPARING]
-            }
+            orderStatus: OrderStatus.PROCESS
           }
         },
         { $sort: { createdAt: 1 } }, // Oldest first
@@ -660,7 +633,7 @@ class OrderService {
           $match: {
             restaurantId: id,
             $or: [
-              { orderStatus: OrderStatus.PENDING, paymentStatus: PaymentStatus.PENDING },
+              { orderStatus: OrderStatus.PROCESS, paymentStatus: PaymentStatus.PENDING },
               { orderStatus: OrderStatus.READY }
             ]
           }
@@ -909,23 +882,6 @@ class OrderService {
     return result[0];
   }
 
-  public async getOrderStatus(orderId: string): Promise<{ orderStatus: OrderStatus; paymentStatus: PaymentStatus; orderNumber: string }> {
-    const id = shapeIntoMongooseObjectId(orderId);
-
-    const order = await this.orderModel.findById(id)
-      .select("orderStatus paymentStatus orderNumber")
-      .exec();
-
-    if (!order) {
-      throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
-    }
-
-    return {
-      orderStatus: order.orderStatus,
-      paymentStatus: order.paymentStatus,
-      orderNumber: order.orderNumber,
-    };
-  }
 }
 
 export default OrderService;

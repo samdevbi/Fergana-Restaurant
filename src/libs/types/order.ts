@@ -20,7 +20,6 @@ export interface Order {
     tableNumber: number;
     memberId?: ObjectId;
     orderTotal: number;
-    orderDelivery?: number;
     orderStatus: OrderStatus;
     orderType: OrderType;
     paymentStatus: PaymentStatus;
@@ -50,6 +49,7 @@ export interface OrderCreateInput {
     existingOrderId?: string;
     isAddingToExisting?: boolean;
     hasPermission?: boolean; // Permission to create order on non-ACTIVE table
+    isCustomerOrder?: boolean; // true if customer confirms existing order is theirs, false if not
 }
 
 export interface OrderConfirmationResponse {
@@ -57,6 +57,8 @@ export interface OrderConfirmationResponse {
     existingOrder?: Order;
     needsPermission?: boolean;
     message?: string;
+    isCustomerOrder?: boolean; // true if customer confirms it's their order, false if not
+    needsStaffAction?: boolean; // true if customer says NO and needs staff to close order
 }
 
 export interface OrderInquiry {
@@ -67,7 +69,10 @@ export interface OrderInquiry {
 
 export interface OrderUpdateInput {
     orderId: string;
-    orderStatus: OrderStatus;
+    action: "update-status" | "complete" | "cancel" | "modify-items";
+    orderStatus?: OrderStatus; // For update-status action
+    reason?: string; // For cancel action
+    items?: OrderItemInput[]; // For modify-items action
 }
 
 export interface PaymentVerificationInput {

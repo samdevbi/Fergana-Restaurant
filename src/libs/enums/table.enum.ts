@@ -3,7 +3,6 @@ export enum TableStatus {
     OCCUPIED = "OCCUPIED",
     ACTIVE = "ACTIVE",
     PAUSE = "PAUSE",
-    BLOCK = "BLOCK",
 }
 
 

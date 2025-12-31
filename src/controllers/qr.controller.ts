@@ -16,66 +16,84 @@ const qrController: T = {};
 /**
  * Get menu for specific table's restaurant
  * Public endpoint - no authentication required
+ * Query param: isCustomerOrder (true/false) - customer's response to confirmation
  */
 qrController.getMenu = async (req: Request, res: Response) => {
     try {
         const { tableId } = req.params;
+        const { isCustomerOrder } = req.query;
 
         // Get table info
         const table = await tableService.getTableById(tableId);
 
-        // Check if table is available for orders
-        const isAvailable = await tableService.checkTableAvailabilityForOrder(tableId);
-        if (!isAvailable) {
-            throw new Errors(
-                HttpCode.FORBIDDEN,
-                Message.TABLE_NOT_AVAILABLE
-            );
+        // Check if there's an active order on this table
+        const existingOrder = await orderService.getOrderByTable(tableId);
+
+        // If active order exists
+        if (existingOrder) {
+            // If customer has already responded
+            if (isCustomerOrder !== undefined) {
+                // Customer said YES - it's their order
+                if (isCustomerOrder === "true") {
+                    // Get menu products for restaurant
+                    const inquiry: ProductInquiry = {
+                        page: 1,
+                        limit: 1000,
+                        order: "createdAt",
+                    };
+
+                    const products = await productService.getProducts(inquiry);
+
+                    // Return menu
+                    return res.status(HttpCode.OK).json({
+                        menu: products,
+                    });
+                } else {
+                    // Customer said NO - it's not their order
+                    // Return warning
+                    const existingOrderDetails = await orderService.getOrderById(existingOrder._id.toString());
+                    return res.status(HttpCode.OK).json({
+                        needsStaffAction: true,
+                        needsConfirmation: false,
+                        message: "Bu stolda faol zakaz mavjud. Iltimos, xodimdan zakazni yopishni va stolni faollashtirishni so'rang.",
+                        existingOrder: {
+                            orderId: existingOrderDetails._id,
+                            orderNumber: existingOrderDetails.orderNumber,
+                            orderStatus: existingOrderDetails.orderStatus,
+                            orderTotal: existingOrderDetails.orderTotal,
+                            items: existingOrderDetails.orderItems,
+                        },
+                    });
+                }
+            }
+
+            // First time - ask customer for confirmation
+            const existingOrderDetails = await orderService.getOrderById(existingOrder._id.toString());
+            return res.status(HttpCode.OK).json({
+                needsConfirmation: true,
+                hasExistingOrder: true,
+                message: "Bu stolda faol zakaz mavjud. Bu zakaz siznikimi?",
+                existingOrder: {
+                    orderId: existingOrderDetails._id,
+                    orderNumber: existingOrderDetails.orderNumber,
+                    orderStatus: existingOrderDetails.orderStatus,
+                    orderTotal: existingOrderDetails.orderTotal,
+                    items: existingOrderDetails.orderItems,
+                },
+            });
         }
 
-        // Get all active orders for this table
-        const activeOrders = await orderService.getActiveOrdersByTableWithDetails(tableId);
-
-        // Get all orders history for this table (including completed)
-        const orderHistory = await orderService.getAllOrdersByTable(tableId);
-
-        // Get menu products for restaurant
+        // No active order exists - just return menu
         const inquiry: ProductInquiry = {
             page: 1,
-            limit: 1000, // Get all products
-            order: "createdAt", // Sort by creation date (descending by default)
+            limit: 1000,
+            order: "createdAt",
         };
 
         const products = await productService.getProducts(inquiry);
 
-        // Return menu with table info and order history
+        // Return menu
         res.status(HttpCode.OK).json({
-            table: {
-                tableId: table._id,
-                tableNumber: table.tableNumber,
-                status: table.status,
-                hasActiveOrders: activeOrders.length > 0,
-                activeOrders: activeOrders.map(order => ({
-                    orderId: order._id,
-                    orderNumber: order.orderNumber,
-                    orderStatus: order.orderStatus,
-                    paymentStatus: order.paymentStatus,
-                    orderTotal: order.orderTotal,
-                    createdAt: order.createdAt,
-                })),
-                orderHistory: orderHistory.map(order => ({
-                    orderId: order._id,
-                    orderNumber: order.orderNumber,
-                    orderStatus: order.orderStatus,
-                    paymentStatus: order.paymentStatus,
-                    orderTotal: order.orderTotal,
-                    createdAt: order.createdAt,
-                    completedAt: order.completedAt,
-                })),
-            },
-            restaurant: {
-                restaurantId: table.restaurantId,
-            },
             menu: products,
         });
     } catch (err) {
@@ -88,158 +106,28 @@ qrController.getMenu = async (req: Request, res: Response) => {
 /**
  * Create order for table
  * Public endpoint - no authentication required
+ * Security: Rate limiting only
  */
 qrController.createOrder = async (req: Request, res: Response) => {
     try {
         const { tableId } = req.params;
 
-        // Get table info to check status
-        const table = await tableService.getTableById(tableId);
-
-        // Check if table is available for orders
-        const isAvailable = await tableService.checkTableAvailabilityForOrder(tableId);
-
-        // Check if there's an existing order on this table
-        const existingOrder = await orderService.getOrderByTable(tableId);
-
-        // If table is not ACTIVE but has existing orders, ask for permission
-        if (!isAvailable && existingOrder && !req.body.hasPermission) {
-            const existingOrderDetails = await orderService.getOrderById(existingOrder._id.toString());
-            return res.status(HttpCode.OK).json({
-                needsPermission: true,
-                needsConfirmation: true,
-                message: "This table has existing orders. Do you want to create a new order on this table?",
-                existingOrder: {
-                    orderId: existingOrderDetails._id,
-                    orderNumber: existingOrderDetails.orderNumber,
-                    orderStatus: existingOrderDetails.orderStatus,
-                    orderTotal: existingOrderDetails.orderTotal,
-                    items: existingOrderDetails.orderItems,
-                },
-            });
-        }
-
-        // If table is not ACTIVE and no permission given, reject
-        if (!isAvailable && !req.body.hasPermission) {
-            throw new Errors(
-                HttpCode.FORBIDDEN,
-                Message.TABLE_NOT_AVAILABLE
-            );
-        }
-
         const input: OrderCreateInput = {
             tableId: tableId,
             items: req.body.items || [],
-            existingOrderId: req.body.existingOrderId,
-            isAddingToExisting: req.body.isAddingToExisting || false,
-            hasPermission: req.body.hasPermission || false,
         };
 
-        // Validate items
+        // Basic validation - items required
         if (!input.items || input.items.length === 0) {
-            throw new Errors(HttpCode.BAD_REQUEST, Errors.standard.message);
+            throw new Errors(HttpCode.BAD_REQUEST, "Items are required");
         }
 
-        // If customer says "no" to existing order, they want a new separate order
-        // Set isAddingToExisting to false and don't send existingOrderId to create new order
-        if (input.existingOrderId && !input.isAddingToExisting) {
-            // Customer wants new order, not adding to existing
-            input.existingOrderId = undefined;
-            input.isAddingToExisting = false;
-        }
+        await orderService.createQROrder(input);
 
-        const result = await orderService.createQROrder(input);
-
-        // Check if confirmation is needed
-        if (result && 'needsConfirmation' in result && result.needsConfirmation) {
-            if (result.needsPermission) {
-                return res.status(HttpCode.OK).json({
-                    needsPermission: true,
-                    needsConfirmation: true,
-                    message: result.message || "This table has existing orders. Do you want to create a new order on this table?",
-                    existingOrder: result.existingOrder ? {
-                        orderId: result.existingOrder._id,
-                        orderNumber: result.existingOrder.orderNumber,
-                        orderStatus: result.existingOrder.orderStatus,
-                        orderTotal: result.existingOrder.orderTotal,
-                        items: result.existingOrder.orderItems,
-                    } : undefined,
-                });
-            } else {
-                return res.status(HttpCode.OK).json({
-                    needsConfirmation: true,
-                    message: "Is this your order?",
-                    existingOrder: result.existingOrder ? {
-                        orderId: result.existingOrder._id,
-                        orderNumber: result.existingOrder.orderNumber,
-                        orderStatus: result.existingOrder.orderStatus,
-                        orderTotal: result.existingOrder.orderTotal,
-                        items: result.existingOrder.orderItems,
-                    } : undefined,
-                });
-            }
-        }
-
-        // Normal order creation or adding to existing
-        const order = result as Order;
-        res.status(HttpCode.CREATED).json({
-            orderId: order._id,
-            orderNumber: order.orderNumber,
-            orderTotal: order.orderTotal,
-            orderStatus: order.orderStatus,
-            paymentStatus: order.paymentStatus,
-            tableNumber: order.tableNumber,
-            items: order.orderItems,
-        });
+        // Return 204 No Content - successful but no response body
+        res.status(204).send();
     } catch (err) {
         console.log("Error, createOrder:", err);
-        if (err instanceof Errors) res.status(err.code).json(err);
-        else res.status(Errors.standard.code).json(Errors.standard);
-    }
-};
-
-/**
- * Get order status
- * Public endpoint - no authentication required
- */
-qrController.getOrderStatus = async (req: Request, res: Response) => {
-    try {
-        const { orderId } = req.params;
-
-        const result = await orderService.getOrderStatus(orderId);
-
-        res.status(HttpCode.OK).json(result);
-    } catch (err) {
-        console.log("Error, getOrderStatus:", err);
-        if (err instanceof Errors) res.status(err.code).json(err);
-        else res.status(Errors.standard.code).json(Errors.standard);
-    }
-};
-
-/**
- * Get full order details (for tracking)
- * Public endpoint - no authentication required
- */
-qrController.getOrderDetails = async (req: Request, res: Response) => {
-    try {
-        const { orderId } = req.params;
-
-        const result = await orderService.getOrderById(orderId);
-
-        res.status(HttpCode.OK).json({
-            orderId: result._id,
-            orderNumber: result.orderNumber,
-            orderStatus: result.orderStatus,
-            paymentStatus: result.paymentStatus,
-            orderTotal: result.orderTotal,
-            tableNumber: result.tableNumber,
-            items: result.orderItems,
-            products: result.productData,
-            createdAt: result.createdAt,
-            updatedAt: result.updatedAt,
-        });
-    } catch (err) {
-        console.log("Error, getOrderDetails:", err);
         if (err instanceof Errors) res.status(err.code).json(err);
         else res.status(Errors.standard.code).json(Errors.standard);
     }
