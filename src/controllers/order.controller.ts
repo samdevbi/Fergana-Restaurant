@@ -74,9 +74,9 @@ orderController.markOrderReadyByKitchen = async (req: ExtendedRequest, res: Resp
 
 orderController.getOrderByStaff = async (req: ExtendedRequest, res: Response) => {
     try {
-        const { id } = req.params;
+        const { tableId } = req.params;
 
-        const result = await orderService.getActiveOrdersByTableWithDetails(id);
+        const result = await orderService.getActiveOrdersByTableWithDetails(tableId);
 
         res.status(HttpCode.OK).json(result);
     } catch (err) {

@@ -110,22 +110,29 @@ router.get(
     orderController.getOrderByStaff
 );
 
+router.post(
+    "/orders/:id/items",
+    memberController.verifyAuth,
+    verifyOwner,
+    orderController.upsertOrderItem
+);
+
 router.delete(
     "/admin/orders/:id/items/:itemId",
     memberController.verifyAuth,
-    verifyServiceStaff,
+    verifyOwner,
     orderController.deleteOrderItem
 );
 router.post(
     "/admin/orders/:id/complete",
     memberController.verifyAuth,
-    verifyServiceStaff,
+    verifyOwner,
     orderController.completeOrder
 );
 router.post(
     "/admin/orders/:id/cancel",
     memberController.verifyAuth,
-    verifyServiceStaff,
+    verifyOwner,
     orderController.cancelOrder
 );
 

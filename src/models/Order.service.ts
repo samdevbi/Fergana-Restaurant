@@ -470,8 +470,9 @@ class OrderService {
     }).exec();
 
     if (existingItem) {
-      // Update quantity
+      // Update quantity and price
       existingItem.itemQuantity = item.itemQuantity;
+      existingItem.itemPrice = item.itemPrice;
       await existingItem.save();
     } else {
       // Add new item
