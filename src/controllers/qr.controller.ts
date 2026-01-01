@@ -34,12 +34,12 @@ qrController.getMenu = async (req: Request, res: Response) => {
             // Check if customer wants to skip confirmation (already confirmed before)
             const skipConfirmation = req.query.skipConfirmation === "true";
 
-            // Check if order was created recently (within last 10 minutes)
+            // Check if order was created recently (within last 1 minute)
             // If yes, assume it's the same customer and skip confirmation
             const orderCreatedAt = new Date(existingOrder.createdAt);
             const now = new Date();
             const minutesSinceCreation = (now.getTime() - orderCreatedAt.getTime()) / (1000 * 60);
-            const isRecentOrder = minutesSinceCreation < 10; // 10 minutes threshold
+            const isRecentOrder = minutesSinceCreation < 1; // 1 minute threshold
 
             // If customer has already responded or wants to skip confirmation
             if (isCustomerOrder !== undefined || skipConfirmation) {
@@ -77,7 +77,7 @@ qrController.getMenu = async (req: Request, res: Response) => {
                 }
             }
 
-            // If order was created recently (within 10 minutes), skip confirmation
+            // If order was created recently (within 1 minute), skip confirmation
             // Assume it's the same customer continuing to order
             if (isRecentOrder) {
                 // Get menu products for restaurant directly
@@ -95,7 +95,7 @@ qrController.getMenu = async (req: Request, res: Response) => {
                 });
             }
 
-            // First time - ask customer for confirmation (order is older than 10 minutes)
+            // First time - ask customer for confirmation (order is older than 1 minute)
             const existingOrderDetails = await orderService.getOrderById(existingOrder._id.toString());
             return res.status(HttpCode.OK).json({
                 needsConfirmation: true,
