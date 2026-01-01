@@ -76,12 +76,6 @@ router.get(
     orderController.getOrderByStaff
 );
 
-router.post(
-    "/orders/:id/items",
-    memberController.verifyAuth,
-    verifyServiceStaff,
-    orderController.upsertOrderItem
-);
 router.delete(
     "/orders/:id/items/:itemId",
     memberController.verifyAuth,
@@ -110,7 +104,7 @@ router.get(
     orderController.getOrderByStaff
 );
 
-router.put(
+router.post(
     "/admin/orders/:id/items",
     memberController.verifyAuth,
     verifyOwner,
