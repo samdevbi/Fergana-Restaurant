@@ -110,11 +110,11 @@ router.get(
     orderController.getOrderByStaff
 );
 
-router.post(
-    "/orders/:id/items",
+router.put(
+    "/admin/orders/:id/items",
     memberController.verifyAuth,
     verifyOwner,
-    orderController.upsertOrderItem
+    orderController.updateOrderItems
 );
 
 router.delete(

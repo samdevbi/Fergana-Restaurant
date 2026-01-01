@@ -7,6 +7,7 @@ import {
   OrderCompleteInput,
   OrderCancelInput,
   OrderConfirmationResponse,
+  OrderUpdateItemsInput,
 } from "../libs/types/order";
 import { Member } from "../libs/types/member";
 import OrderModel from "../schema/Order.model";
@@ -442,86 +443,6 @@ class OrderService {
   }
 
   /**
-   * Upsert order item (Add or Update)
-   * If item doesn't exist, adds it. If exists, updates quantity.
-   */
-  public async upsertOrderItem(
-    orderId: string,
-    item: OrderItemInput
-  ): Promise<Order> {
-    const id = shapeIntoMongooseObjectId(orderId);
-    const productId = shapeIntoMongooseObjectId(item.productId);
-
-    // Get order to check if it exists and can be modified
-    const order = await this.orderModel.findById(id).exec();
-    if (!order) {
-      throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
-    }
-
-    // Can only modify READY or PROCESS orders
-    if (order.orderStatus !== OrderStatus.READY && order.orderStatus !== OrderStatus.PROCESS) {
-      throw new Errors(HttpCode.BAD_REQUEST, "Order must be in READY or PROCESS status to modify");
-    }
-
-    // Check if item already exists for this order
-    const existingItem = await this.orderItemModel.findOne({
-      orderId: id,
-      productId: productId,
-    }).exec();
-
-    if (existingItem) {
-      // Update quantity and price
-      existingItem.itemQuantity = item.itemQuantity;
-      existingItem.itemPrice = item.itemPrice;
-      await existingItem.save();
-    } else {
-      // Add new item
-      await this.orderItemModel.create({
-        orderId: id,
-        productId: productId,
-        itemQuantity: item.itemQuantity,
-        itemPrice: item.itemPrice,
-      });
-    }
-
-    // Recalculate order total
-    const allItems = await this.orderItemModel.find({ orderId: id }).exec();
-    const newTotal = allItems.reduce(
-      (sum, item) => sum + item.itemPrice * item.itemQuantity,
-      0
-    );
-
-    // Update order total
-    await this.orderModel.findByIdAndUpdate(
-      id,
-      { orderTotal: newTotal },
-      { new: true }
-    ).exec();
-
-    // Get full updated order
-    const fullOrder = await this.getOrderById(orderId);
-
-    // Notify kitchen
-    notifyKitchen(order.restaurantId, {
-      _id: orderId,
-      orderNumber: fullOrder.orderNumber,
-      tableNumber: fullOrder.tableNumber,
-      updatedOrder: fullOrder,
-      event: "order:items-modified",
-    });
-
-    // Notify service staff
-    notifyServiceStaff(order.restaurantId.toString(), "order:items-modified", {
-      orderId: orderId,
-      orderNumber: fullOrder.orderNumber,
-      tableNumber: fullOrder.tableNumber,
-      updatedTotal: newTotal,
-    });
-
-    return fullOrder;
-  }
-
-  /**
    * Delete order item
    */
   public async deleteOrderItem(
@@ -563,6 +484,78 @@ class OrderService {
     );
 
     // Update order total
+    await this.orderModel.findByIdAndUpdate(
+      id,
+      { orderTotal: newTotal },
+      { new: true }
+    ).exec();
+
+    // Get full updated order
+    const fullOrder = await this.getOrderById(orderId);
+
+    // Notify kitchen
+    notifyKitchen(order.restaurantId, {
+      _id: orderId,
+      orderNumber: fullOrder.orderNumber,
+      tableNumber: fullOrder.tableNumber,
+      updatedOrder: fullOrder,
+      event: "order:items-modified",
+    });
+
+    // Notify service staff
+    notifyServiceStaff(order.restaurantId.toString(), "order:items-modified", {
+      orderId: orderId,
+      orderNumber: fullOrder.orderNumber,
+      tableNumber: fullOrder.tableNumber,
+      updatedTotal: newTotal,
+    });
+
+    return fullOrder;
+  }
+
+  /**
+   * Update order items (replace all items)
+   */
+  public async updateOrderItems(
+    orderId: string,
+    input: OrderUpdateItemsInput
+  ): Promise<Order> {
+    const id = shapeIntoMongooseObjectId(orderId);
+
+    // Get order to check if it exists and can be modified
+    const order = await this.orderModel.findById(id).exec();
+    if (!order) {
+      throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
+    }
+
+    // Can only modify READY or PROCESS orders
+    if (order.orderStatus !== OrderStatus.READY && order.orderStatus !== OrderStatus.PROCESS) {
+      throw new Errors(HttpCode.BAD_REQUEST, "Order must be in READY or PROCESS status to modify");
+    }
+
+    // Delete all existing items
+    await this.orderItemModel.deleteMany({ orderId: id }).exec();
+
+    // Create new items
+    if (input.items && input.items.length > 0) {
+      const itemsToCreate = input.items.map((item) => ({
+        orderId: id,
+        productId: shapeIntoMongooseObjectId(item.productId),
+        itemQuantity: item.itemQuantity,
+        itemPrice: item.itemPrice,
+      }));
+
+      await this.orderItemModel.insertMany(itemsToCreate);
+    }
+
+    // Recalculate order total
+    const allItems = await this.orderItemModel.find({ orderId: id }).exec();
+    const newTotal = allItems.reduce(
+      (sum, item) => sum + item.itemPrice * item.itemQuantity,
+      0
+    );
+
+    // Update order total (orderId, tableId, restaurantId remain unchanged)
     await this.orderModel.findByIdAndUpdate(
       id,
       { orderTotal: newTotal },

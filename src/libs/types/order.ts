@@ -69,6 +69,10 @@ export interface OrderCancelInput {
     reason?: string;
 }
 
+export interface OrderUpdateItemsInput {
+    items: OrderItemInput[];
+}
+
 export interface OrderConfirmationResponse {
     needsConfirmation?: boolean;
     hasExistingOrder?: boolean;

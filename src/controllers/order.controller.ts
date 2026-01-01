@@ -89,33 +89,6 @@ orderController.getOrderByStaff = async (req: ExtendedRequest, res: Response) =>
 // Staff Order Management (RESTful)
 
 /**
- * Upsert order item (Add or Update)
- * POST /orders/:id/items
- */
-orderController.upsertOrderItem = async (req: ExtendedRequest, res: Response) => {
-    try {
-        const { id } = req.params;
-        const item: OrderItemInput = {
-            productId: req.body.productId,
-            itemQuantity: req.body.itemQuantity,
-            itemPrice: req.body.itemPrice,
-        };
-
-        if (!item.productId || !item.itemQuantity || !item.itemPrice) {
-            throw new Errors(HttpCode.BAD_REQUEST, "productId, itemQuantity, and itemPrice are required");
-        }
-
-        const result = await orderService.upsertOrderItem(id, item);
-
-        res.status(HttpCode.OK).json(result);
-    } catch (err) {
-        console.log("Error, upsertOrderItem:", err);
-        if (err instanceof Errors) res.status(err.code).json(err);
-        else res.status(Errors.standard.code).json(Errors.standard);
-    }
-};
-
-/**
  * Delete order item
  * DELETE /orders/:id/items/:itemId
  */
@@ -128,6 +101,36 @@ orderController.deleteOrderItem = async (req: ExtendedRequest, res: Response) =>
         res.status(HttpCode.OK).json(result);
     } catch (err) {
         console.log("Error, deleteOrderItem:", err);
+        if (err instanceof Errors) res.status(err.code).json(err);
+        else res.status(Errors.standard.code).json(Errors.standard);
+    }
+};
+
+/**
+ * Update order items (replace all items)
+ * PUT /orders/:id/items
+ */
+orderController.updateOrderItems = async (req: ExtendedRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { items } = req.body;
+
+        if (!items || !Array.isArray(items)) {
+            throw new Errors(HttpCode.BAD_REQUEST, "items array is required");
+        }
+
+        // Validate each item
+        for (const item of items) {
+            if (!item.productId || !item.itemQuantity || !item.itemPrice) {
+                throw new Errors(HttpCode.BAD_REQUEST, "Each item must have productId, itemQuantity, and itemPrice");
+            }
+        }
+
+        const result = await orderService.updateOrderItems(id, { items });
+
+        res.status(HttpCode.OK).json(result);
+    } catch (err) {
+        console.log("Error, updateOrderItems:", err);
         if (err instanceof Errors) res.status(err.code).json(err);
         else res.status(Errors.standard.code).json(Errors.standard);
     }
