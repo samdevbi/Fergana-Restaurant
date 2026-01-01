@@ -321,10 +321,17 @@ class OrderService {
         {
           $match: {
             restaurantId: id,
-            orderStatus: OrderStatus.PROCESS
+            orderStatus: { $in: [OrderStatus.PROCESS, OrderStatus.READY] }
           }
         },
-        { $sort: { createdAt: 1 } }, // Oldest first
+        {
+          $addFields: {
+            statusPriority: {
+              $cond: [{ $eq: ["$orderStatus", OrderStatus.PROCESS] }, 1, 2]
+            }
+          }
+        },
+        { $sort: { statusPriority: 1, createdAt: 1 } }, // PROCESS first, then READY, oldest first
         {
           $lookup: {
             from: "orderItems",

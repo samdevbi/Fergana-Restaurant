@@ -272,6 +272,7 @@ adminController.createStaff = async (req: ExtendedRequest, res: Response) => {
             memberPassword: req.body.memberPassword,
             memberRole: req.body.memberRole || MemberRole.STAFF,
             memberStatus: MemberStatus.ACTIVE,
+            restaurantId: req.member._id, // Owner's _id is the restaurantId
         };
 
         if (!input.memberName || !input.memberPassword) {
