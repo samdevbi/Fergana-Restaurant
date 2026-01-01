@@ -104,6 +104,11 @@ router.get(
     orderController.getOrderByStaff
 );
 
+router.post("/admin/order/:tableId/createOrder",
+    memberController.verifyAuth,
+    verifyOwner,
+    qrController.createOrder);
+
 router.post(
     "/admin/orders/:id/items",
     memberController.verifyAuth,
