@@ -533,20 +533,51 @@ class OrderService {
       throw new Errors(HttpCode.BAD_REQUEST, "Order must be in READY or PROCESS status to modify");
     }
 
-    // Delete all existing items
-    await this.orderItemModel.deleteMany({ orderId: id }).exec();
+    // Get existing items
+    const existingItems = await this.orderItemModel.find({ orderId: id }).exec();
 
-    // Create new items
+    // Create a map of existing items by productId for quick lookup
+    const existingItemsMap = new Map();
+    existingItems.forEach((item) => {
+      existingItemsMap.set(item.productId.toString(), item);
+    });
+
+    // Process items from request
+    const requestProductIds = new Set();
+
     if (input.items && input.items.length > 0) {
-      const itemsToCreate = input.items.map((item) => ({
-        orderId: id,
-        productId: shapeIntoMongooseObjectId(item.productId),
-        itemQuantity: item.itemQuantity,
-        itemPrice: item.itemPrice,
-      }));
+      for (const item of input.items) {
+        const productId = shapeIntoMongooseObjectId(item.productId);
+        const productIdStr = productId.toString();
+        requestProductIds.add(productIdStr);
 
-      await this.orderItemModel.insertMany(itemsToCreate);
+        const existingItem = existingItemsMap.get(productIdStr);
+
+        if (existingItem) {
+          // Item exists - update quantity and price if changed
+          const needsUpdate =
+            existingItem.itemQuantity !== item.itemQuantity ||
+            existingItem.itemPrice !== item.itemPrice;
+
+          if (needsUpdate) {
+            existingItem.itemQuantity = item.itemQuantity;
+            existingItem.itemPrice = item.itemPrice;
+            await existingItem.save();
+          }
+          // If unchanged, do nothing - item remains as is
+        } else {
+          // Item doesn't exist - create new item
+          await this.orderItemModel.create({
+            orderId: id,
+            productId: productId,
+            itemQuantity: item.itemQuantity,
+            itemPrice: item.itemPrice,
+          });
+        }
+      }
     }
+
+    // Items not in request remain unchanged (not deleted)
 
     // Recalculate order total
     const allItems = await this.orderItemModel.find({ orderId: id }).exec();
