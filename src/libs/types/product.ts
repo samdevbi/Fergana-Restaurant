@@ -14,6 +14,8 @@ export interface Product {
     productDesc: string,
     productIngred: [string],
     productImage: string,
+    recommended: boolean,
+    forManyPeople: number,
 }
 
 export interface ProductInquiry {
@@ -37,6 +39,8 @@ export interface ProductInput {
     productDesc?: string,
     productIngred?: [string],
     productImage?: string,
+    recommended?: boolean,
+    forManyPeople?: number,
 }
 
 export interface ProductUpdateInput {
@@ -51,4 +55,6 @@ export interface ProductUpdateInput {
     productDesc?: string,
     productIngred?: [string],
     productImage?: string,
+    recommended?: boolean,
+    forManyPeople?: number,
 }

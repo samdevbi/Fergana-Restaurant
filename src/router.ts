@@ -135,6 +135,20 @@ router.post(
     orderController.cancelOrder
 );
 
+/* Admin - Order History & Management */
+router.get(
+    "/admin/orders/history",
+    memberController.verifyAuth,
+    verifyOwner,
+    adminController.getAllOrders
+);
+router.get(
+    "/admin/orders/history/:id",
+    memberController.verifyAuth,
+    verifyOwner,
+    adminController.getOrderDetail
+);
+
 /* Admin - Products */
 router.post(
     "/admin/products/create",

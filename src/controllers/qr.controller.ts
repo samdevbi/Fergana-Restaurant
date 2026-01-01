@@ -31,10 +31,20 @@ qrController.getMenu = async (req: Request, res: Response) => {
 
         // If active order exists
         if (existingOrder) {
-            // If customer has already responded
-            if (isCustomerOrder !== undefined) {
-                // Customer said YES - it's their order
-                if (isCustomerOrder === "true") {
+            // Check if customer wants to skip confirmation (already confirmed before)
+            const skipConfirmation = req.query.skipConfirmation === "true";
+
+            // Check if order was created recently (within last 10 minutes)
+            // If yes, assume it's the same customer and skip confirmation
+            const orderCreatedAt = new Date(existingOrder.createdAt);
+            const now = new Date();
+            const minutesSinceCreation = (now.getTime() - orderCreatedAt.getTime()) / (1000 * 60);
+            const isRecentOrder = minutesSinceCreation < 10; // 10 minutes threshold
+
+            // If customer has already responded or wants to skip confirmation
+            if (isCustomerOrder !== undefined || skipConfirmation) {
+                // Customer said YES - it's their order, or skipConfirmation is true
+                if (isCustomerOrder === "true" || skipConfirmation) {
                     // Get menu products for restaurant
                     const inquiry: ProductInquiry = {
                         page: 1,
@@ -67,7 +77,25 @@ qrController.getMenu = async (req: Request, res: Response) => {
                 }
             }
 
-            // First time - ask customer for confirmation
+            // If order was created recently (within 10 minutes), skip confirmation
+            // Assume it's the same customer continuing to order
+            if (isRecentOrder) {
+                // Get menu products for restaurant directly
+                const inquiry: ProductInquiry = {
+                    page: 1,
+                    limit: 1000,
+                    order: "createdAt",
+                };
+
+                const products = await productService.getProducts(inquiry);
+
+                // Return menu without confirmation
+                return res.status(HttpCode.OK).json({
+                    menu: products,
+                });
+            }
+
+            // First time - ask customer for confirmation (order is older than 10 minutes)
             const existingOrderDetails = await orderService.getOrderById(existingOrder._id.toString());
             return res.status(HttpCode.OK).json({
                 needsConfirmation: true,

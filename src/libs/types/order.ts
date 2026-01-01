@@ -48,6 +48,16 @@ export interface OrderInquiry {
     orderStatus?: OrderStatus;
 }
 
+export interface OrderAdminInquiry {
+    page: number;
+    limit: number;
+    orderStatus?: OrderStatus;
+    tableNumber?: number;
+    startDate?: string; // ISO date string
+    endDate?: string; // ISO date string
+    search?: string; // Search by order number
+}
+
 export interface OrderCreateInput {
     tableId: string;
     items: OrderItemInput[];

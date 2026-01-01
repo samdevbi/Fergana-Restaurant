@@ -11,9 +11,9 @@ const authService = new AuthService();
  */
 export const authenticateSocket = async (socket: Socket, next: Function) => {
     try {
-        const token = socket.handshake.auth.token || 
-                     socket.handshake.query.token as string ||
-                     socket.handshake.headers.cookie?.split('accessToken=')[1]?.split(';')[0];
+        const token = socket.handshake.auth.token ||
+            socket.handshake.query.token as string ||
+            socket.handshake.headers.cookie?.split('accessToken=')[1]?.split(';')[0];
 
         if (!token) {
             // Allow anonymous connections (for QR customers without tokens)

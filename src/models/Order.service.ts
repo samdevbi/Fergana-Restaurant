@@ -8,6 +8,7 @@ import {
   OrderCancelInput,
   OrderConfirmationResponse,
   OrderUpdateItemsInput,
+  OrderAdminInquiry,
 } from "../libs/types/order";
 import { Member } from "../libs/types/member";
 import OrderModel from "../schema/Order.model";
@@ -745,6 +746,104 @@ class OrderService {
     const fullOrder = await this.getOrderById(orderId);
 
     return fullOrder;
+  }
+
+  /**
+   * Get all orders for admin with filtering
+   * Supports filtering by: table number, date range, order status, search by order number
+   */
+  public async getAllOrdersByAdmin(
+    restaurantId: ObjectId | string,
+    inquiry: OrderAdminInquiry
+  ): Promise<{ orders: Order[]; total: number }> {
+    const id = shapeIntoMongooseObjectId(restaurantId);
+
+    // Build match query
+    const match: any = {
+      restaurantId: id,
+    };
+
+    // Filter by order status
+    if (inquiry.orderStatus) {
+      match.orderStatus = inquiry.orderStatus;
+    }
+
+    // Filter by table number
+    if (inquiry.tableNumber) {
+      match.tableNumber = Number(inquiry.tableNumber);
+    }
+
+    // Filter by date range
+    if (inquiry.startDate || inquiry.endDate) {
+      match.createdAt = {};
+      if (inquiry.startDate) {
+        const startDate = new Date(inquiry.startDate);
+        startDate.setHours(0, 0, 0, 0);
+        match.createdAt.$gte = startDate;
+      }
+      if (inquiry.endDate) {
+        const endDate = new Date(inquiry.endDate);
+        endDate.setHours(23, 59, 59, 999);
+        match.createdAt.$lte = endDate;
+      }
+    }
+
+    // Search by order number
+    if (inquiry.search) {
+      match.orderNumber = { $regex: new RegExp(inquiry.search, "i") };
+    }
+
+    // Get total count
+    const total = await this.orderModel.countDocuments(match).exec();
+
+    // Get orders with pagination
+    const orders = await this.orderModel
+      .aggregate([
+        { $match: match },
+        { $sort: { createdAt: -1 } }, // Newest first
+        { $skip: (inquiry.page - 1) * inquiry.limit },
+        { $limit: inquiry.limit },
+        {
+          $lookup: {
+            from: "orderItems",
+            localField: "_id",
+            foreignField: "orderId",
+            as: "orderItems",
+          },
+        },
+        {
+          $lookup: {
+            from: "products",
+            localField: "orderItems.productId",
+            foreignField: "_id",
+            as: "productData",
+          },
+        },
+      ])
+      .exec();
+
+    return {
+      orders: orders || [],
+      total: total,
+    };
+  }
+
+  /**
+   * Get order detail by ID for admin
+   */
+  public async getOrderDetailByAdmin(
+    restaurantId: ObjectId | string,
+    orderId: string
+  ): Promise<Order> {
+    const restId = shapeIntoMongooseObjectId(restaurantId);
+    const order = await this.getOrderById(orderId);
+
+    // Verify order belongs to this restaurant
+    if (order.restaurantId.toString() !== restId.toString()) {
+      throw new Errors(HttpCode.FORBIDDEN, "Order does not belong to this restaurant");
+    }
+
+    return order;
   }
 
 }

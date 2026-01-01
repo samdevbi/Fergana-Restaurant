@@ -52,6 +52,15 @@ const productSchema = new Schema(
             type: String,
         },
 
+        recommended: {
+            type: Boolean,
+            default: false,
+        },
+
+        forManyPeople: {
+            type: Number,
+            default: 1,
+        },
 
     },
     { timestamps: true }  // updateAt, createAt
