@@ -28,12 +28,38 @@ class AuthService {
         });
     }
 
+    public async createOrderToken(tableId: string) {
+        return new Promise((resolve, reject) => {
+            const duration = `3h`; // 3 hours session for customer
+            const payload = { tableId, role: 'CUSTOMER' };
+            jwt.sign(payload, process.env.SECRET_TOKEN as string, {
+                expiresIn: duration,
+            }, (err: Error | null, token: string | undefined) => {
+                if (err) reject(new Errors(HttpCode.UNAUTHORIZED, Message.TOKEN_CREATION_FAILED)
+                );
+                else resolve(token as string);
+            });
+        });
+    }
+
     public async checkAuth(token: string): Promise<Member> {
         const result: Member = (await jwt.verify(
             token,
             this.secretToken
         )) as Member;
         return result;
+    }
+
+    public async verifyOrderToken(token: string): Promise<{ tableId: string, role: string } | null> {
+        try {
+            const result: any = await jwt.verify(token, this.secretToken);
+            if (result && result.role === 'CUSTOMER' && result.tableId) {
+                return result;
+            }
+            return null;
+        } catch (err) {
+            return null;
+        }
     }
 }
 
