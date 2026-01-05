@@ -2,7 +2,7 @@ import { Server as SocketIOServer } from "socket.io";
 import { Server as HTTPServer } from "http";
 import { ExtendedSocket } from "./socket.types";
 import { MemberRole } from "../enums/member.enum";
-import { OrderStatus, PaymentStatus } from "../enums/order.enum";
+import { OrderStatus } from "../enums/order.enum";
 import { TableStatus } from "../enums/table.enum";
 import { ObjectId } from "mongoose";
 
@@ -158,7 +158,6 @@ export const emitTableUpdate = (tableId: string | ObjectId, status: TableStatus,
 export const emitOrderStatusChange = (
     orderId: string | ObjectId,
     orderStatus: OrderStatus,
-    paymentStatus: PaymentStatus,
     restaurantId: string | ObjectId,
     tableId: string | ObjectId
 ) => {
@@ -169,7 +168,6 @@ export const emitOrderStatusChange = (
     const data = {
         orderId: orderIdStr,
         orderStatus: orderStatus,
-        paymentStatus: paymentStatus,
     };
 
     // Notify kitchen if order is in process
@@ -184,6 +182,6 @@ export const emitOrderStatusChange = (
     io.to(`restaurant:${restaurantIdStr}`).emit("order:status-changed", data);
 
     // Notify table room
-    emitTableUpdate(tableId, orderStatus === OrderStatus.COMPLETED ? TableStatus.ACTIVE : TableStatus.OCCUPIED, orderIdStr);
+    emitTableUpdate(tableId, orderStatus === OrderStatus.COMPLETED ? TableStatus.AVAILABLE : TableStatus.OCCUPIED, orderIdStr);
 };
 

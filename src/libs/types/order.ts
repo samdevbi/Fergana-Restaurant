@@ -1,5 +1,5 @@
 import { ObjectId } from "mongoose";
-import { OrderStatus, PaymentStatus, OrderType } from "../enums/order.enum";
+import { OrderStatus, OrderType } from "../enums/order.enum";
 import { Product } from "./product";
 
 export interface OrderItem {
@@ -21,13 +21,9 @@ export interface Order {
     orderTotal: number;
     orderStatus: OrderStatus;
     orderType: OrderType;
-    paymentStatus: PaymentStatus;
-    paymentMethod?: string;
     completedBy?: ObjectId;
     completedAt?: Date;
     cancellationReason?: string;
-    verifiedBy?: ObjectId;
-    verifiedAt?: Date;
     createdAt: Date;
     updatedAt: Date;
     /* from aggregations */
@@ -62,12 +58,6 @@ export interface OrderCreateInput {
     tableId: string;
     items: OrderItemInput[];
     hasPermission?: boolean;
-}
-
-export interface PaymentVerificationInput {
-    orderId: string;
-    paymentMethod: string;
-    paymentProof?: string;
 }
 
 export interface OrderCompleteInput {

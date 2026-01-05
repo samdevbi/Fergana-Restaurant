@@ -45,7 +45,7 @@ class TableService {
                 qrCode: qrCode,
                 capacity: input.capacity,
                 location: input.location,
-                status: TableStatus.ACTIVE,
+                status: TableStatus.AVAILABLE,
             });
 
             // Generate QR code image file (use CLIENT_URL for customer-facing QR codes)

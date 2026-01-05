@@ -1,5 +1,5 @@
 import mongoose, { Schema } from "mongoose";
-import { OrderStatus, PaymentStatus, OrderType } from "../libs/enums/order.enum";
+import { OrderStatus, OrderType } from "../libs/enums/order.enum";
 
 const orderSchema = new Schema(
     {
@@ -50,30 +50,6 @@ const orderSchema = new Schema(
             default: OrderType.QR_ORDER,
         },
 
-        paymentStatus: {
-            type: String,
-            enum: PaymentStatus,
-            default: PaymentStatus.PENDING,
-        },
-
-        paymentMethod: {
-            type: String,
-            required: false,
-        },
-
-        verifiedBy: {
-            type: Schema.Types.ObjectId,
-            ref: "Member",
-            required: false,
-            default: null,
-        },
-
-        verifiedAt: {
-            type: Date,
-            required: false,
-            default: null,
-        },
-
         completedBy: {
             type: Schema.Types.ObjectId,
             ref: "Member",
@@ -98,7 +74,6 @@ const orderSchema = new Schema(
 // Indexes for efficient queries
 orderSchema.index({ tableId: 1, orderStatus: 1 });
 orderSchema.index({ restaurantId: 1, orderStatus: 1, createdAt: -1 });
-orderSchema.index({ paymentStatus: 1, orderStatus: 1 });
 orderSchema.index({ createdAt: -1 });
 // Index for orderNumber (not unique - allows daily reset with same numbers)
 orderSchema.index({ restaurantId: 1, orderNumber: 1 });

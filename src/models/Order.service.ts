@@ -3,7 +3,6 @@ import {
   OrderInquiry,
   OrderItemInput,
   OrderCreateInput,
-  PaymentVerificationInput,
   OrderCompleteInput,
   OrderCancelInput,
   OrderConfirmationResponse,
@@ -17,7 +16,7 @@ import { shapeIntoMongooseObjectId } from "../libs/config";
 import Errors, { Message } from "../libs/Errors";
 import { HttpCode } from "../libs/Errors";
 import { ObjectId } from "mongoose";
-import { OrderStatus, PaymentStatus, OrderType } from "../libs/enums/order.enum";
+import { OrderStatus, OrderType } from "../libs/enums/order.enum";
 import MemberService from "./Member.service";
 import TableService from "./Table.service";
 import {
@@ -142,6 +141,12 @@ class OrderService {
 
     // Get table info
     const table = await this.tableService.getTableById(tableId);
+
+    // Check if table is paused
+    if (table.status === TableStatus.PAUSE) {
+      throw new Errors(HttpCode.FORBIDDEN, "Ushbu stol vaqtincha xizmat ko'rsatmayapti.");
+    }
+
     const restaurantId = table.restaurantId;
 
     // Check if there's an existing active order on this table
@@ -165,7 +170,6 @@ class OrderService {
         orderTotal: amount,
         orderStatus: OrderStatus.PROCESS,
         orderType: OrderType.QR_ORDER,
-        paymentStatus: PaymentStatus.PENDING,
         memberId: null, // Anonymous order
       });
 
@@ -208,18 +212,8 @@ class OrderService {
           orderNumber: newOrder.orderNumber,
           tableNumber: newOrder.tableNumber,
           orderStatus: newOrder.orderStatus,
-          paymentStatus: newOrder.paymentStatus,
           orderTotal: newOrder.orderTotal,
           items: input.items,
-      });
-
-        // Notify about payment verification needed
-        notifyServiceStaff(restaurantId.toString(), "payment:needs-verification", {
-          orderId: newOrderId.toString(),
-          orderNumber: newOrder.orderNumber,
-          tableNumber: newOrder.tableNumber,
-          orderTotal: newOrder.orderTotal,
-          paymentStatus: newOrder.paymentStatus,
         });
       }
 
@@ -237,7 +231,6 @@ class OrderService {
         orderNumber: fullNewOrder.orderNumber,
         tableNumber: fullNewOrder.tableNumber,
         orderStatus: fullNewOrder.orderStatus,
-        paymentStatus: fullNewOrder.paymentStatus,
         orderTotal: fullNewOrder.orderTotal,
         items: fullNewOrder.orderItems,
         event: "order:new",
@@ -293,13 +286,12 @@ class OrderService {
     const fullOrder = await this.getOrderById(id.toString());
 
     // Notify service staff and owner that order is ready
-      emitOrderStatusChange(
-        id,
+    emitOrderStatusChange(
+      id,
       OrderStatus.READY,
-      order.paymentStatus,
-        order.restaurantId,
-        order.tableId
-      );
+      order.restaurantId,
+      order.tableId
+    );
 
     // Also notify via service staff channel
     notifyServiceStaff(order.restaurantId.toString(), "order:ready", {
@@ -466,6 +458,12 @@ class OrderService {
       throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
     }
 
+    // Check if table is paused
+    const table = await this.tableService.getTableById(order.tableId);
+    if (table.status === TableStatus.PAUSE) {
+      throw new Errors(HttpCode.FORBIDDEN, "Ushbu stol vaqtincha xizmat ko'rsatmayapti.");
+    }
+
     // Can only modify READY or PROCESS orders
     if (order.orderStatus !== OrderStatus.READY && order.orderStatus !== OrderStatus.PROCESS) {
       throw new Errors(HttpCode.BAD_REQUEST, "Order must be in READY or PROCESS status to modify");
@@ -534,6 +532,12 @@ class OrderService {
     const order = await this.orderModel.findById(id).exec();
     if (!order) {
       throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
+    }
+
+    // Check if table is paused
+    const table = await this.tableService.getTableById(order.tableId);
+    if (table.status === TableStatus.PAUSE) {
+      throw new Errors(HttpCode.FORBIDDEN, "Ushbu stol vaqtincha xizmat ko'rsatmayapti.");
     }
 
     // Can only modify READY or PROCESS orders
@@ -660,15 +664,14 @@ class OrderService {
 
     // Only free table if no other active orders exist
     if (!activeOrders) {
-      await this.tableService.updateTable(order.tableId, { status: TableStatus.ACTIVE });
-      emitTableUpdate(order.tableId, TableStatus.ACTIVE);
+      await this.tableService.updateTable(order.tableId, { status: TableStatus.AVAILABLE });
+      emitTableUpdate(order.tableId, TableStatus.AVAILABLE);
     }
 
     // Notify staff and owner about order completion
     emitOrderStatusChange(
       id,
       OrderStatus.COMPLETED,
-      order.paymentStatus,
       order.restaurantId,
       order.tableId
     );
@@ -720,15 +723,14 @@ class OrderService {
 
     // Only free table if no other active orders exist
     if (!activeOrders) {
-      await this.tableService.updateTable(order.tableId, { status: TableStatus.ACTIVE });
-      emitTableUpdate(order.tableId, TableStatus.ACTIVE);
+      await this.tableService.updateTable(order.tableId, { status: TableStatus.AVAILABLE });
+      emitTableUpdate(order.tableId, TableStatus.AVAILABLE);
     }
 
     // Notify staff and owner about order cancellation
     emitOrderStatusChange(
       id,
       OrderStatus.CANCELLED,
-      order.paymentStatus,
       order.restaurantId,
       order.tableId
     );

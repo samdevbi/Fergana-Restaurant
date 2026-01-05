@@ -31,7 +31,7 @@ const tableSchema = new Schema(
         status: {
             type: String,
             enum: TableStatus,
-            default: TableStatus.ACTIVE,
+            default: TableStatus.AVAILABLE,
         },
 
         currentOrderId: {

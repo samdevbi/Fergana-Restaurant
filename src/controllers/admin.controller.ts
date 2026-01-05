@@ -11,6 +11,7 @@ import { MemberInput, MemberUpdateInput } from "../libs/types/member";
 import { MemberRole, MemberStatus } from "../libs/enums/member.enum";
 import { OrderAdminInquiry } from "../libs/types/order";
 import { OrderStatus } from "../libs/enums/order.enum";
+import { TableStatus } from "../libs/enums/table.enum";
 
 const tableService = new TableService();
 const memberService = new MemberService();
@@ -48,9 +49,9 @@ adminController.getDashboard = async (req: ExtendedRequest, res: Response) => {
 
         // Get all tables
         const tables = await tableService.getAllTables(restaurantId);
-        const activeTables = tables.filter(t => t.status === "ACTIVE").length;
-        const occupiedTables = tables.filter(t => t.status === "OCCUPIED").length;
-        const pausedTables = tables.filter(t => t.status === "PAUSE").length;
+        const availableTables = tables.filter(t => t.status === TableStatus.AVAILABLE).length;
+        const occupiedTables = tables.filter(t => t.status === TableStatus.OCCUPIED).length;
+        const pausedTables = tables.filter(t => t.status === TableStatus.PAUSE).length;
 
         res.status(HttpCode.OK).json({
             today: {
@@ -59,7 +60,7 @@ adminController.getDashboard = async (req: ExtendedRequest, res: Response) => {
             },
             tables: {
                 total: tables.length,
-                active: activeTables,
+                available: availableTables,
                 occupied: occupiedTables,
                 paused: pausedTables,
             },

@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { T } from "../libs/types/common";
 import Errors, { HttpCode, Message } from "../libs/Errors";
 import TableService from "../models/Table.service";
+import { TableStatus } from "../libs/enums/table.enum";
 import ProductService from "../models/Product.service";
 import OrderService from "../models/Order.service";
 import AuthService from "../models/Auth.service";
@@ -46,6 +47,11 @@ qrController.getMenu = async (req: Request, res: Response) => {
 
         // Get table info
         const table = await tableService.getTableById(tableId);
+
+        // Check if table is paused
+        if (table.status === TableStatus.PAUSE) {
+            throw new Errors(HttpCode.FORBIDDEN, "Ushbu stol vaqtincha xizmat ko'rsatmayapti.");
+        }
 
         // Check if there's an active order on this table
         const existingOrder = await orderService.getOrderByTable(tableId);
