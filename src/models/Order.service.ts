@@ -211,7 +211,7 @@ class OrderService {
           paymentStatus: newOrder.paymentStatus,
           orderTotal: newOrder.orderTotal,
           items: input.items,
-        });
+      });
 
         // Notify about payment verification needed
         notifyServiceStaff(restaurantId.toString(), "payment:needs-verification", {
@@ -293,13 +293,13 @@ class OrderService {
     const fullOrder = await this.getOrderById(id.toString());
 
     // Notify service staff and owner that order is ready
-    emitOrderStatusChange(
-      id,
+      emitOrderStatusChange(
+        id,
       OrderStatus.READY,
       order.paymentStatus,
-      order.restaurantId,
-      order.tableId
-    );
+        order.restaurantId,
+        order.tableId
+      );
 
     // Also notify via service staff channel
     notifyServiceStaff(order.restaurantId.toString(), "order:ready", {

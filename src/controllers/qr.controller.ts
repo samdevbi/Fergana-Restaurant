@@ -45,7 +45,7 @@ qrController.getMenu = async (req: Request, res: Response) => {
             if (isCustomerOrder !== undefined || skipConfirmation) {
                 // Customer said YES - it's their order, or skipConfirmation is true
                 if (isCustomerOrder === "true" || skipConfirmation) {
-                    // Get menu products for restaurant
+        // Get menu products for restaurant
                     const inquiry: ProductInquiry = {
                         page: 1,
                         limit: 1000,

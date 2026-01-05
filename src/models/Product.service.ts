@@ -12,7 +12,7 @@ class ProductService {
     constructor() {
         this.productModel = ProductModel;
     }
-    public async getProducts(inquiry: ProductInquiry): Promise<Product[]> {
+    public async getProducts(inquiry: ProductInquiry): Promise<Product[]> {        
         const match: T = { productStatus: ProductStatus.PROCESS };
 
         if (inquiry.productCollection)
@@ -55,18 +55,18 @@ class ProductService {
                 { productNameUz: { $regex: new RegExp(inquiry.search, "i") } },
                 { productNameKr: { $regex: new RegExp(inquiry.search, "i") } },
             ];
-        }
+        }        
 
-        const sort: T = inquiry.order === "productPrice" ? { [inquiry.order]: 1 } : { [inquiry.order]: -1 };
+        const sort: T = inquiry.order === "productPrice" ? { [inquiry.order]: 1 } : { [inquiry.order]: -1 };        
 
         const result = await this.productModel
-            .aggregate([
-                { $match: match },
-                { $sort: sort },
-                { $skip: (inquiry.page * 1 - 1) * inquiry.limit },
-                { $limit: inquiry.limit * 1 },
-            ])
-            .exec();
+          .aggregate([
+            { $match: match },
+            { $sort: sort },
+            { $skip: (inquiry.page * 1 - 1) * inquiry.limit },
+            { $limit: inquiry.limit * 1 },
+          ])
+          .exec();
         if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
 
         return result;
@@ -94,7 +94,7 @@ class ProductService {
     }
 
     public async updateChosenProduct(id: string, input: ProductUpdateInput): Promise<Product> {
-        id = shapeIntoMongooseObjectId(id);
+       id = shapeIntoMongooseObjectId(id);
         const result = await this.productModel.findOneAndUpdate({ _id: id }, input, { new: true }).exec();
         if (!result) throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
         return result;
@@ -114,7 +114,7 @@ class ProductService {
         if (!result || result.length === 0) {
             return [];
         }
-        return result;
+       return result;
     }
 }
 
