@@ -4,7 +4,8 @@ import Errors, { HttpCode, Message } from "../libs/Errors";
 import { Product, ProductInput, ProductInquiry, ProductUpdateInput } from "../libs/types/product";
 import ProductModel from "../schema/Product.model";
 import { T } from "../libs/types/common";
-import { ObjectId } from "mongoose";
+import { Types } from "mongoose";
+type ObjectId = Types.ObjectId;
 
 class ProductService {
     private readonly productModel;
@@ -12,7 +13,7 @@ class ProductService {
     constructor() {
         this.productModel = ProductModel;
     }
-    public async getProducts(inquiry: ProductInquiry): Promise<Product[]> {        
+    public async getProducts(inquiry: ProductInquiry): Promise<Product[]> {
         const match: T = { productStatus: ProductStatus.PROCESS };
 
         if (inquiry.productCollection)
@@ -37,7 +38,7 @@ class ProductService {
             .exec();
         if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
 
-        return result;
+        return result as Product[];
 
     }
 
@@ -55,21 +56,21 @@ class ProductService {
                 { productNameUz: { $regex: new RegExp(inquiry.search, "i") } },
                 { productNameKr: { $regex: new RegExp(inquiry.search, "i") } },
             ];
-        }        
+        }
 
-        const sort: T = inquiry.order === "productPrice" ? { [inquiry.order]: 1 } : { [inquiry.order]: -1 };        
+        const sort: T = inquiry.order === "productPrice" ? { [inquiry.order]: 1 } : { [inquiry.order]: -1 };
 
         const result = await this.productModel
-          .aggregate([
-            { $match: match },
-            { $sort: sort },
-            { $skip: (inquiry.page * 1 - 1) * inquiry.limit },
-            { $limit: inquiry.limit * 1 },
-          ])
-          .exec();
+            .aggregate([
+                { $match: match },
+                { $sort: sort },
+                { $skip: (inquiry.page * 1 - 1) * inquiry.limit },
+                { $limit: inquiry.limit * 1 },
+            ])
+            .exec();
         if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
 
-        return result;
+        return result as Product[];
 
     }
 
@@ -80,13 +81,13 @@ class ProductService {
 
         if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
 
-        return result;
+        return result as Product;
     }
     /*SPA*/
 
     public async createNewProduct(input: ProductInput): Promise<Product> {
         try {
-            return await this.productModel.create(input);
+            return (await this.productModel.create(input)) as Product;
         } catch (err) {
             console.error("Error, model:createNewProduct:", err);
             throw new Errors(HttpCode.BAD_REQUEST, Message.CREATE_FAILED)
@@ -94,10 +95,10 @@ class ProductService {
     }
 
     public async updateChosenProduct(id: string, input: ProductUpdateInput): Promise<Product> {
-       id = shapeIntoMongooseObjectId(id);
+        id = shapeIntoMongooseObjectId(id);
         const result = await this.productModel.findOneAndUpdate({ _id: id }, input, { new: true }).exec();
         if (!result) throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
-        return result;
+        return result as Product;
     }
 
     public async deleteProduct(id: string): Promise<Product> {
@@ -106,7 +107,7 @@ class ProductService {
         const result = await this.productModel.findByIdAndDelete(productId).exec();
 
         if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
-        return result;
+        return result as Product;
     }
 
     public async getAllProduct(): Promise<Product[]> {
@@ -114,7 +115,7 @@ class ProductService {
         if (!result || result.length === 0) {
             return [];
         }
-       return result;
+        return result as Product[];
     }
 }
 

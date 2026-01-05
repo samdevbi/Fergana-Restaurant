@@ -1,4 +1,5 @@
-import { ObjectId } from "mongoose";
+import { Types } from "mongoose";
+type ObjectId = Types.ObjectId;
 import { ProductCollection, ProductStatus } from "../enums/product.enum";
 
 
@@ -12,7 +13,7 @@ export interface Product {
     productCcal: number,
     productPrepTime: number,
     productDesc: string,
-    productIngred: [string],
+    productIngred: string[];
     productImage: string,
     recommended: boolean,
     forManyPeople: number,

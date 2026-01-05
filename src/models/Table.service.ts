@@ -3,7 +3,8 @@ import { Table, TableInput, TableUpdateInput } from "../libs/types/table";
 import Errors, { HttpCode, Message } from "../libs/Errors";
 import { shapeIntoMongooseObjectId } from "../libs/config";
 import { TableStatus } from "../libs/enums/table.enum";
-import { ObjectId } from "mongoose";
+import { Types } from "mongoose";
+type ObjectId = Types.ObjectId;
 import OrderService from "./Order.service";
 import { generateQRCodeFile } from "../libs/utils/qrcode.generator";
 
@@ -65,11 +66,11 @@ class TableService {
                     { new: true }
                 ).exec();
 
-                return updatedTable || result;
+                return (updatedTable || result) as Table;
             } catch (qrError) {
                 console.error("Error generating QR code image:", qrError);
                 // Return table even if QR code image generation fails
-                return result;
+                return result as Table;
             }
         } catch (err) {
             console.error("Error, model: createTable", err);
@@ -88,7 +89,7 @@ class TableService {
             throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
         }
 
-        return result;
+        return result as Table[];
     }
 
     public async getTableById(tableId: ObjectId | string): Promise<Table> {
@@ -99,7 +100,7 @@ class TableService {
             throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
         }
 
-        return result;
+        return result as Table;
     }
 
     public async updateTable(tableId: ObjectId | string, input: TableUpdateInput): Promise<Table> {
@@ -120,7 +121,7 @@ class TableService {
             throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
         }
 
-        return result;
+        return result as Table;
     }
 
     public async deleteTable(tableId: ObjectId | string): Promise<Table> {
@@ -139,7 +140,7 @@ class TableService {
             throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
         }
 
-        return result;
+        return result as Table;
     }
 }
 

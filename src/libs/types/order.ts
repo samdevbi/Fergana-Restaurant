@@ -1,4 +1,5 @@
-import { ObjectId } from "mongoose";
+import { Types } from "mongoose";
+type ObjectId = Types.ObjectId;
 import { OrderStatus, OrderType } from "../enums/order.enum";
 import { Product } from "./product";
 

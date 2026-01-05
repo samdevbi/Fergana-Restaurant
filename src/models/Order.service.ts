@@ -15,7 +15,8 @@ import OrderItemModel from "../schema/OrderItem.model";
 import { shapeIntoMongooseObjectId } from "../libs/config";
 import Errors, { Message } from "../libs/Errors";
 import { HttpCode } from "../libs/Errors";
-import { ObjectId } from "mongoose";
+import { Types } from "mongoose";
+type ObjectId = Types.ObjectId;
 import { OrderStatus, OrderType } from "../libs/enums/order.enum";
 import MemberService from "./Member.service";
 import TableService from "./Table.service";
@@ -57,10 +58,10 @@ class OrderService {
     }, 0);
 
     try {
-      const newOrder: Order = await this.orderModel.create({
+      const newOrder: Order = (await this.orderModel.create({
         orderTotal: amount,
         memberId: memberId,
-      });
+      })) as unknown as Order;
       const orderId = newOrder._id;
       await this.recordOrderItem(orderId, input);
 
@@ -162,7 +163,7 @@ class OrderService {
 
     try {
       // Create NEW order for kitchen (always create new order)
-      const newOrder: Order = await this.orderModel.create({
+      const newOrder: Order = (await this.orderModel.create({
         orderNumber: orderNumber,
         restaurantId: restaurantId,
         tableId: tableId,
@@ -171,7 +172,7 @@ class OrderService {
         orderStatus: OrderStatus.PROCESS,
         orderType: OrderType.QR_ORDER,
         memberId: null, // Anonymous order
-      });
+      })) as unknown as Order;
 
       const newOrderId = newOrder._id;
 
@@ -368,7 +369,7 @@ class OrderService {
       .sort({ createdAt: -1 }) // Get most recent order
       .exec();
 
-    return result;
+    return result as Order | null;
   }
 
   /**
@@ -545,13 +546,19 @@ class OrderService {
       throw new Errors(HttpCode.BAD_REQUEST, "Order must be in READY or PROCESS status to modify");
     }
 
-    // Get existing items
+    // Get existing items for this order
     const existingItems = await this.orderItemModel.find({ orderId: id }).exec();
+
+    // Track changes for kitchen
+    const additions: OrderItemInput[] = [];
+    let hasSubtractions = false;
 
     // Create a map of existing items by productId for quick lookup
     const existingItemsMap = new Map();
     existingItems.forEach((item) => {
-      existingItemsMap.set(item.productId.toString(), item);
+      if (item.productId) {
+        existingItemsMap.set(item.productId.toString(), item);
+      }
     });
 
     // Process items from request
@@ -566,19 +573,29 @@ class OrderService {
         const existingItem = existingItemsMap.get(productIdStr);
 
         if (existingItem) {
-          // Item exists - update quantity and price if changed
-          const needsUpdate =
-            existingItem.itemQuantity !== item.itemQuantity ||
-            existingItem.itemPrice !== item.itemPrice;
-
-          if (needsUpdate) {
-            existingItem.itemQuantity = item.itemQuantity;
-            existingItem.itemPrice = item.itemPrice;
-            await existingItem.save();
+          // If quantity increased, capture delta for new kitchen ticket
+          if (item.itemQuantity > existingItem.itemQuantity) {
+            additions.push({
+              productId: item.productId,
+              itemQuantity: item.itemQuantity - existingItem.itemQuantity,
+              itemPrice: item.itemPrice,
+            });
           }
-          // If unchanged, do nothing - item remains as is
+
+          // If quantity decreased, mark for modification notification
+          if (item.itemQuantity < existingItem.itemQuantity) {
+            hasSubtractions = true;
+          }
+
+          // Update main order's item
+          existingItem.itemQuantity = item.itemQuantity;
+          existingItem.itemPrice = item.itemPrice;
+          await existingItem.save();
         } else {
-          // Item doesn't exist - create new item
+          // New item - treat as addition
+          additions.push(item);
+
+          // Create in main order
           await this.orderItemModel.create({
             orderId: id,
             productId: productId,
@@ -589,7 +606,16 @@ class OrderService {
       }
     }
 
-    // Items not in request remain unchanged (not deleted)
+    // Check for fully removed items
+    for (const existingItem of existingItems) {
+      if (existingItem.productId) {
+        const existingProductId = existingItem.productId.toString();
+        if (!requestProductIds.has(existingProductId)) {
+          await this.orderItemModel.findByIdAndDelete(existingItem._id).exec();
+          hasSubtractions = true;
+        }
+      }
+    }
 
     // Recalculate order total
     const allItems = await this.orderItemModel.find({ orderId: id }).exec();
@@ -598,34 +624,73 @@ class OrderService {
       0
     );
 
-    // Update order total (orderId, tableId, restaurantId remain unchanged)
+    // Update main order total
     await this.orderModel.findByIdAndUpdate(
       id,
       { orderTotal: newTotal },
       { new: true }
     ).exec();
 
-    // Get full updated order
-    const fullOrder = await this.getOrderById(orderId);
+    // --- Kitchen Notifications ---
 
-    // Notify kitchen
-    notifyKitchen(order.restaurantId, {
-      _id: orderId,
-      orderNumber: fullOrder.orderNumber,
-      tableNumber: fullOrder.tableNumber,
-      updatedOrder: fullOrder,
-      event: "order:items-modified",
-    });
+    // 1. Handle Additions (New Kitchen Ticket)
+    if (additions.length > 0) {
+      const orderNumber = await this.generateDailyOrderNumber(order.restaurantId);
+      const additionTotal = additions.reduce((sum, i) => sum + (i.itemPrice * i.itemQuantity), 0);
 
-    // Notify service staff
-    notifyServiceStaff(order.restaurantId.toString(), "order:items-modified", {
-      orderId: orderId,
-      orderNumber: fullOrder.orderNumber,
-      tableNumber: fullOrder.tableNumber,
-      updatedTotal: newTotal,
-    });
+      const kitchenTicket: Order = (await this.orderModel.create({
+        orderNumber: orderNumber,
+        restaurantId: order.restaurantId,
+        tableId: order.tableId,
+        tableNumber: order.tableNumber,
+        orderTotal: additionTotal,
+        orderStatus: OrderStatus.PROCESS,
+        orderType: OrderType.QR_ORDER,
+        memberId: null,
+      })) as unknown as Order;
 
-    return fullOrder;
+      await this.recordOrderItem(kitchenTicket._id, additions);
+
+      // Notify kitchen about new ticket
+      const fullKitchenTicket = await this.getOrderById(kitchenTicket._id.toString());
+      notifyKitchen(order.restaurantId, {
+        _id: kitchenTicket._id.toString(),
+        orderNumber: fullKitchenTicket.orderNumber,
+        tableNumber: fullKitchenTicket.tableNumber,
+        orderStatus: fullKitchenTicket.orderStatus,
+        orderTotal: fullKitchenTicket.orderTotal,
+        items: fullKitchenTicket.orderItems,
+        event: "order:new",
+      });
+    }
+
+    // 2. Handle Subtractions (Update Original Kitchen Ticket)
+    // Note: Since we don't track which sub-order items belong to, we notify modifications on the master order
+    if (hasSubtractions || additions.length > 0) {
+      const fullOrder = await this.getOrderById(orderId);
+
+      // Notify kitchen about modification 
+      // (Only if there were subtractions, or to sync final state)
+      if (hasSubtractions) {
+        notifyKitchen(order.restaurantId, {
+          _id: orderId,
+          orderNumber: fullOrder.orderNumber,
+          tableNumber: fullOrder.tableNumber,
+          updatedOrder: fullOrder,
+          event: "order:items-modified",
+        });
+      }
+
+      // Notify service staff
+      notifyServiceStaff(order.restaurantId.toString(), "order:items-modified", {
+        orderId: orderId,
+        orderNumber: fullOrder.orderNumber,
+        tableNumber: fullOrder.tableNumber,
+        updatedTotal: newTotal,
+      });
+    }
+
+    return await this.getOrderById(orderId);
   }
 
   /**

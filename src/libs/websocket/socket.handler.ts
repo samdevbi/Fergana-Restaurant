@@ -4,7 +4,8 @@ import { ExtendedSocket } from "./socket.types";
 import { MemberRole } from "../enums/member.enum";
 import { OrderStatus } from "../enums/order.enum";
 import { TableStatus } from "../enums/table.enum";
-import { ObjectId } from "mongoose";
+import { Types } from "mongoose";
+type ObjectId = Types.ObjectId;
 
 let io: SocketIOServer | null = null;
 

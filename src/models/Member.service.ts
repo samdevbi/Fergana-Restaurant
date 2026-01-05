@@ -4,7 +4,8 @@ import Errors, { HttpCode, Message } from "../libs/Errors";
 import { MemberStatus, MemberRole } from "../libs/enums/member.enum";
 import * as bcrypt from "bcryptjs";
 import { shapeIntoMongooseObjectId } from "../libs/config";
-import { ObjectId } from "mongoose";
+import { Types } from "mongoose";
+type ObjectId = Types.ObjectId;
 
 class MemberService {
     private readonly memberModel;
@@ -27,8 +28,9 @@ class MemberService {
 
         try {
             const result = await this.memberModel.create(input);
-            result.memberPassword = "";
-            return result.toJSON();
+            const member = result.toJSON() as Member;
+            member.memberPassword = "";
+            return member;
         } catch (err) {
             console.error("Error, model:signup", err);
             throw new Errors(HttpCode.BAD_REQUEST, Message.USED_NICK_PHONE);
@@ -60,9 +62,9 @@ class MemberService {
             throw new Errors(HttpCode.UNAUTHORIZED, Message.WRONG_PASSWORD);
         }
 
-        return await this.memberModel.findById(member._id)
+        return (await this.memberModel.findById(member._id)
             .lean()
-            .exec();
+            .exec()) as Member;
     }
 
     public async getRestaurant(): Promise<Member> {
@@ -71,7 +73,7 @@ class MemberService {
             .exec();
         if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
 
-        return result;
+        return result as Member;
     }
 
     public async getMemberDetail(member: Member): Promise<Member> {
@@ -81,7 +83,7 @@ class MemberService {
         if (!result)
             throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
 
-        return result;
+        return result as Member;
     }
 
     public async getMemberById(memberId: ObjectId | string): Promise<Member> {
@@ -90,7 +92,7 @@ class MemberService {
         if (!result)
             throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
 
-        return result;
+        return result as Member;
     }
 
     public async updateMember(member: Member, input: MemberUpdateInput): Promise<Member> {
@@ -105,7 +107,7 @@ class MemberService {
             .exec();
         if (!result) throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
 
-        return result;
+        return result as Member;
     }
 
     public async getUsers(): Promise<Member[]> {
@@ -114,7 +116,7 @@ class MemberService {
         }).exec();
         if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
 
-        return result;
+        return result as Member[];
     }
 
 }
