@@ -95,6 +95,12 @@ class MemberService {
 
     public async updateMember(member: Member, input: MemberUpdateInput): Promise<Member> {
         const memberId = shapeIntoMongooseObjectId(member._id);
+
+        if (input.memberPassword) {
+            const salt = await bcrypt.genSalt();
+            input.memberPassword = await bcrypt.hash(input.memberPassword, salt);
+        }
+
         const result = await this.memberModel.findOneAndUpdate({ _id: memberId }, input, { new: true })
             .exec();
         if (!result) throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
