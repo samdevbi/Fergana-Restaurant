@@ -145,26 +145,57 @@ class OrderService {
   public async createQROrder(input: OrderCreateInput): Promise<Order> {
     const tableId = shapeIntoMongooseObjectId(input.tableId);
 
-    // Get table info
+    // 1. Get existing table info
     const table = await this.tableService.getTableById(tableId);
-
-    // Check if table is paused
     if (table.status === TableStatus.PAUSE) {
       throw new Errors(HttpCode.FORBIDDEN, "Ushbu stol vaqtincha xizmat ko'rsatmayapti.");
     }
 
     const restaurantId = table.restaurantId;
 
-    // Calculate order total
-    const amount = input.items.reduce((accumulator: number, item: OrderItemInput) => {
-      return accumulator + item.itemPrice * item.itemQuantity;
-    }, 0);
+    // 2. DELTA LOGIC: Detect difference between "Requested" and "Already Active"
+    // This allows the Dashboard to send a cumulative list without double-counting.
+    const activeOrders = await this.getActiveOrdersByTableWithDetails(tableId);
+    const currentlyActiveQuantities = new Map<string, number>();
 
-    // Generate daily order number
+    activeOrders.forEach((order) => {
+      order.orderItems?.forEach((item: any) => {
+        if (item.productId) {
+          const pid = item.productId.toString();
+          currentlyActiveQuantities.set(
+            pid,
+            (currentlyActiveQuantities.get(pid) || 0) + item.itemQuantity
+          );
+        }
+      });
+    });
+
+    const deltaItems: OrderItemInput[] = [];
+    input.items.forEach((item) => {
+      const pid = item.productId.toString();
+      const existingQty = currentlyActiveQuantities.get(pid) || 0;
+      const extraQty = item.itemQuantity - existingQty;
+
+      if (extraQty > 0) {
+        deltaItems.push({
+          productId: item.productId,
+          itemQuantity: extraQty,
+          itemPrice: item.itemPrice,
+        });
+      }
+    });
+
+    // If no new items or extra quantities, return some indicator or existing data
+    if (deltaItems.length === 0) {
+      if (activeOrders.length > 0) return activeOrders[0];
+      throw new Errors(HttpCode.BAD_REQUEST, "Hech qanday yangi mahsulot tanlanmagan.");
+    }
+
+    // 3. Create NEW order only for the DELTA
+    const amount = deltaItems.reduce((acc, item) => acc + item.itemPrice * item.itemQuantity, 0);
     const orderNumber = await this.generateDailyOrderNumber(restaurantId);
 
     try {
-      // Create NEW order (Every buyurtma is independent)
       const newOrder: Order = (await this.orderModel.create({
         orderNumber: orderNumber,
         restaurantId: restaurantId,
@@ -173,23 +204,19 @@ class OrderService {
         orderTotal: amount,
         orderStatus: OrderStatus.PROCESS,
         orderType: OrderType.QR_ORDER,
-        memberId: null, // Anonymous order
+        memberId: null,
       })) as unknown as Order;
 
       const newOrderId = newOrder._id;
+      await this.recordOrderItem(newOrderId, deltaItems);
 
-      // Record order items for this specific order
-      await this.recordOrderItem(newOrderId, input.items);
-
-      // Update table status (allow multiple orders, just mark as occupied if first order)
+      // 4. Update table status
       if (table.status !== TableStatus.OCCUPIED) {
         await this.tableService.updateTable(tableId, { status: TableStatus.OCCUPIED });
       }
 
-      // Get full new order with items (for kitchen)
+      // 5. Notifications
       const fullNewOrder = await this.getOrderById(newOrderId.toString());
-
-      // Notify kitchen about new order (always send new order to kitchen)
       const kitchenPayload = {
         _id: newOrderId.toString(),
         orderNumber: fullNewOrder.orderNumber,
@@ -200,13 +227,9 @@ class OrderService {
       };
 
       notifyKitchen(restaurantId, kitchenPayload);
-
-      // Notify service staff and owner about the NEW order
       notifyServiceStaff(restaurantId, "order:new", kitchenPayload);
-
       emitTableUpdate(tableId, TableStatus.OCCUPIED, newOrderId);
 
-      // Return new order (for kitchen)
       return fullNewOrder;
     } catch (err) {
       console.log("Error, model: createQROrder", err);
@@ -333,7 +356,7 @@ class OrderService {
           $nin: [OrderStatus.COMPLETED]
         }
       })
-      .sort({ createdAt: 1 }) // Get THE OLDEST active order (Master Order)
+      .sort({ createdAt: -1 }) // Get THE LATEST active order
       .exec();
 
     return result as Order | null;
@@ -517,7 +540,6 @@ class OrderService {
     const existingItems = await this.orderItemModel.find({ orderId: id }).exec();
 
     // Track changes for kitchen
-    const additions: OrderItemInput[] = [];
     let hasSubtractions = false;
 
     // Create a map of existing items by productId for quick lookup
@@ -540,35 +562,27 @@ class OrderService {
         const existingItem = existingItemsMap.get(productIdStr);
 
         if (existingItem) {
-          // If quantity increased, capture delta for new kitchen ticket
+          // Validation: Quantities cannot be increased here
           if (item.itemQuantity > existingItem.itemQuantity) {
-            additions.push({
-              productId: item.productId,
-              itemQuantity: item.itemQuantity - existingItem.itemQuantity,
-              itemPrice: item.itemPrice,
-            });
+            throw new Errors(
+              HttpCode.BAD_REQUEST,
+              "Mahsulot sonini bu yerda oshirish mumkin emas. Yangi buyurtma bering."
+            );
           }
 
-          // If quantity decreased, mark for modification notification
+          // Update if quantity decreased
           if (item.itemQuantity < existingItem.itemQuantity) {
             hasSubtractions = true;
+            existingItem.itemQuantity = item.itemQuantity;
+            existingItem.itemPrice = item.itemPrice;
+            await existingItem.save();
           }
-
-          // Update main order's item
-          existingItem.itemQuantity = item.itemQuantity;
-          existingItem.itemPrice = item.itemPrice;
-          await existingItem.save();
         } else {
-          // New item - treat as addition
-          additions.push(item);
-
-          // Create in main order
-          await this.orderItemModel.create({
-            orderId: id,
-            productId: productId,
-            itemQuantity: item.itemQuantity,
-            itemPrice: item.itemPrice,
-          });
+          // Validation: New items cannot be added here
+          throw new Errors(
+            HttpCode.BAD_REQUEST,
+            "Yangi mahsulotlarni bu yerda qo'shish mumkin emas. 'Yangi buyurtma' tugmasidan foydalaning."
+          );
         }
       }
     }
@@ -600,10 +614,10 @@ class OrderService {
 
     // --- Kitchen & Staff Notifications ---
 
-    if (additions.length > 0 || hasSubtractions) {
+    if (hasSubtractions) {
       const fullOrder = await this.getOrderById(id.toString());
 
-      // Notify kitchen about the modification
+      // Notify kitchen about the reduction
       notifyKitchen(order.restaurantId, {
         _id: id.toString(),
         orderNumber: fullOrder.orderNumber,
@@ -611,11 +625,8 @@ class OrderService {
         orderStatus: fullOrder.orderStatus,
         orderTotal: fullOrder.orderTotal,
         items: fullOrder.orderItems,
-        event: "order:updated", // Specifically mark as updated
-        changes: {
-          additions,
-          hasSubtractions
-        }
+        event: "order:updated",
+        changes: { hasSubtractions: true }
       });
 
       // Notify service staff and owner
