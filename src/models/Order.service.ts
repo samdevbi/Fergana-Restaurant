@@ -368,7 +368,7 @@ class OrderService {
       .findOne({
         tableId: id,
         orderStatus: {
-          $nin: [OrderStatus.COMPLETED, OrderStatus.CANCELLED]
+          $nin: [OrderStatus.COMPLETED]
         }
       })
       .sort({ createdAt: 1 }) // Get THE OLDEST active order (Master Order)
@@ -389,7 +389,7 @@ class OrderService {
           $match: {
             tableId: id,
             orderStatus: {
-              $nin: [OrderStatus.COMPLETED, OrderStatus.CANCELLED]
+              $nin: [OrderStatus.COMPLETED]
             }
           }
         },
@@ -761,9 +761,8 @@ class OrderService {
     reason?: string
   ): Promise<Order> {
     const id = shapeIntoMongooseObjectId(orderId);
-    const staffIdObj = shapeIntoMongooseObjectId(staffId);
 
-    // Get order to find tableId
+    // Get order to find tableId and other details before deletion
     const order = await this.orderModel.findById(id).exec();
     if (!order) {
       throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
@@ -774,15 +773,11 @@ class OrderService {
       throw new Errors(HttpCode.BAD_REQUEST, "Cannot cancel completed order");
     }
 
-    // Update order status
-    const result = await this.orderModel.findByIdAndUpdate(
-      id,
-      {
-        orderStatus: OrderStatus.CANCELLED,
-        cancellationReason: reason || "Cancelled by staff",
-      },
-      { new: true }
-    ).exec();
+    // 1. Delete associated order items
+    await this.orderItemModel.deleteMany({ orderId: id }).exec();
+
+    // 2. Delete the order itself (Hard Delete)
+    const result = await this.orderModel.findByIdAndDelete(id).exec();
 
     if (!result) {
       throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
@@ -798,9 +793,10 @@ class OrderService {
     }
 
     // Notify staff and owner about order cancellation
+    // We pass the deleted order info for the notifications
     emitOrderStatusChange(
       id,
-      OrderStatus.CANCELLED,
+      "CANCELLED" as any,
       order.restaurantId,
       order.tableId
     );
@@ -810,14 +806,11 @@ class OrderService {
       orderId: id.toString(),
       orderNumber: order.orderNumber,
       tableNumber: order.tableNumber,
-      orderStatus: OrderStatus.CANCELLED,
-      reason: reason || "Cancelled by staff",
+      orderStatus: "DELETED", // Clarify it's actually gone
+      reason: reason || "Cancelled and deleted by staff",
     });
 
-    // Get full order
-    const fullOrder = await this.getOrderById(orderId);
-
-    return fullOrder;
+    return order as unknown as Order;
   }
 
   /**

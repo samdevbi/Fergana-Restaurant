@@ -2,7 +2,6 @@ export enum OrderStatus {
     PROCESS = "PROCESS",
     READY = "READY",
     COMPLETED = "COMPLETED",
-    CANCELLED = "CANCELLED",
 }
 
 export enum OrderType {

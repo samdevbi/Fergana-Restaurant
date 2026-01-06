@@ -41,10 +41,7 @@ adminController.getDashboard = async (req: ExtendedRequest, res: Response) => {
         // Get orders count and revenue for today
         const todayOrders = await orderService.getKitchenOrders(restaurantId);
         const todayRevenue = todayOrders.reduce((sum, order) => {
-            if (order.orderStatus !== "CANCELLED") {
-                return sum + order.orderTotal;
-            }
-            return sum;
+            return sum + order.orderTotal;
         }, 0);
 
         // Get all tables
@@ -89,10 +86,7 @@ adminController.getRevenue = async (req: ExtendedRequest, res: Response) => {
         // TODO: Implement period-based filtering
         const orders = await orderService.getKitchenOrders(restaurantId);
         const totalRevenue = orders.reduce((sum, order) => {
-            if (order.orderStatus !== "CANCELLED") {
-                return sum + order.orderTotal;
-            }
-            return sum;
+            return sum + order.orderTotal;
         }, 0);
 
         res.status(HttpCode.OK).json({
