@@ -107,37 +107,30 @@ orderController.deleteOrderItem = async (req: ExtendedRequest, res: Response) =>
 };
 
 /**
- * Update order items (replace all items)
- * PUT /orders/:id/items
+ * Reduce order item quantity
+ * PATCH /orders/:id/items/:itemId
  */
-orderController.updateOrderItems = async (req: ExtendedRequest, res: Response) => {
+orderController.reduceOrderItemQuantity = async (req: ExtendedRequest, res: Response) => {
     try {
-        const { id } = req.params;
-        const { items } = req.body;
+        const { id, itemId } = req.params;
+        const { quantity } = req.body;
 
-        if (!items || !Array.isArray(items)) {
-            throw new Errors(HttpCode.BAD_REQUEST, "items array is required");
+        if (typeof quantity !== 'number') {
+            throw new Errors(HttpCode.BAD_REQUEST, "quantity must be a number");
         }
 
-        // Validate each item
-        for (const item of items) {
-            if (!item.productId || !item.itemQuantity || !item.itemPrice) {
-                throw new Errors(HttpCode.BAD_REQUEST, "Each item must have productId, itemQuantity, and itemPrice");
-            }
-        }
-
-        const result = await orderService.updateOrderItems(id, { items });
+        const result = await orderService.reduceOrderItemQuantity(id, itemId, quantity);
 
         res.status(HttpCode.OK).json(result);
     } catch (err) {
-        console.log("Error, updateOrderItems:", err);
+        console.log("Error, reduceOrderItemQuantity:", err);
         if (err instanceof Errors) res.status(err.code).json(err);
         else res.status(Errors.standard.code).json(Errors.standard);
     }
 };
 
 /**
- * Complete order
+ * Complete order (Entire Table)
  * POST /orders/:id/complete
  */
 orderController.completeOrder = async (req: ExtendedRequest, res: Response) => {
@@ -149,6 +142,24 @@ orderController.completeOrder = async (req: ExtendedRequest, res: Response) => {
         res.status(HttpCode.OK).json(result);
     } catch (err) {
         console.log("Error, completeOrder:", err);
+        if (err instanceof Errors) res.status(err.code).json(err);
+        else res.status(Errors.standard.code).json(Errors.standard);
+    }
+};
+
+/**
+ * Complete single order only
+ * POST /orders/:id/complete-individual
+ */
+orderController.completeIndividualOrder = async (req: ExtendedRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+
+        const result = await orderService.completeIndividualOrder(id, req.member._id);
+
+        res.status(HttpCode.OK).json(result);
+    } catch (err) {
+        console.log("Error, completeIndividualOrder:", err);
         if (err instanceof Errors) res.status(err.code).json(err);
         else res.status(Errors.standard.code).json(Errors.standard);
     }

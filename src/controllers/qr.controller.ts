@@ -204,10 +204,10 @@ qrController.createOrder = async (req: Request, res: Response) => {
             throw new Errors(HttpCode.BAD_REQUEST, "Items are required");
         }
 
-        await orderService.createQROrder(input);
+        const extendedReq = req as any; // Cast to access member
+        const result = await orderService.createQROrder(input, extendedReq.member?._id);
 
-        // Return 204 No Content - successful but no response body
-        res.status(204).send();
+        res.status(HttpCode.CREATED).json(result);
     } catch (err) {
         console.log("Error, createOrder:", err);
         if (err instanceof Errors) res.status(err.code).json(err);

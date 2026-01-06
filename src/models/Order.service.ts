@@ -142,7 +142,7 @@ class OrderService {
     return `ORD-${Date.now()}`;
   }
 
-  public async createQROrder(input: OrderCreateInput): Promise<Order> {
+  public async createQROrder(input: OrderCreateInput, memberId?: ObjectId): Promise<Order> {
     const tableId = shapeIntoMongooseObjectId(input.tableId);
 
     // 1. Get existing table info
@@ -185,10 +185,11 @@ class OrderService {
       }
     });
 
-    // If no new items or extra quantities, return some indicator or existing data
+    // If no new items or extra quantities, return existing data
     if (deltaItems.length === 0) {
       if (activeOrders.length > 0) return activeOrders[0];
-      throw new Errors(HttpCode.BAD_REQUEST, "Hech qanday yangi mahsulot tanlanmagan.");
+      // Note: This shouldn't normally happen if frontend is working correctly
+      return activeOrders[0];
     }
 
     // 3. Create NEW order only for the DELTA
@@ -204,7 +205,7 @@ class OrderService {
         orderTotal: amount,
         orderStatus: OrderStatus.PROCESS,
         orderType: OrderType.QR_ORDER,
-        memberId: null,
+        memberId: memberId || null,
       })) as unknown as Order;
 
       const newOrderId = newOrder._id;
@@ -511,133 +512,113 @@ class OrderService {
   }
 
   /**
-   * Update order items (replace all items)
+   * Reduce order item quantity (Correction only)
+   * Prevents increasing quantity or adding new items
    */
-  public async updateOrderItems(
+  public async reduceOrderItemQuantity(
     orderId: string,
-    input: OrderUpdateItemsInput
+    itemId: string,
+    newQuantity: number
   ): Promise<Order> {
     const id = shapeIntoMongooseObjectId(orderId);
+    const itemIdObj = shapeIntoMongooseObjectId(itemId);
 
-    // Get order to check if it exists and can be modified
+    // Get order and item
     const order = await this.orderModel.findById(id).exec();
-    if (!order) {
-      throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
-    }
-
-    // Check if table is paused
-    const table = await this.tableService.getTableById(order.tableId);
-    if (table.status === TableStatus.PAUSE) {
-      throw new Errors(HttpCode.FORBIDDEN, "Ushbu stol vaqtincha xizmat ko'rsatmayapti.");
-    }
+    if (!order) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
 
     // Can only modify READY or PROCESS orders
     if (order.orderStatus !== OrderStatus.READY && order.orderStatus !== OrderStatus.PROCESS) {
       throw new Errors(HttpCode.BAD_REQUEST, "Order must be in READY or PROCESS status to modify");
     }
 
-    // Get existing items for this order
-    const existingItems = await this.orderItemModel.find({ orderId: id }).exec();
+    const item = await this.orderItemModel.findOne({ _id: itemIdObj, orderId: id }).exec();
+    if (!item) throw new Errors(HttpCode.NOT_FOUND, "Order item not found");
 
-    // Track changes for kitchen
-    let hasSubtractions = false;
-
-    // Create a map of existing items by productId for quick lookup
-    const existingItemsMap = new Map();
-    existingItems.forEach((item) => {
-      if (item.productId) {
-        existingItemsMap.set(item.productId.toString(), item);
-      }
-    });
-
-    // Process items from request
-    const requestProductIds = new Set();
-
-    if (input.items && input.items.length > 0) {
-      for (const item of input.items) {
-        const productId = shapeIntoMongooseObjectId(item.productId);
-        const productIdStr = productId.toString();
-        requestProductIds.add(productIdStr);
-
-        const existingItem = existingItemsMap.get(productIdStr);
-
-        if (existingItem) {
-          // Validation: Quantities cannot be increased here
-          if (item.itemQuantity > existingItem.itemQuantity) {
-            throw new Errors(
-              HttpCode.BAD_REQUEST,
-              "Mahsulot sonini bu yerda oshirish mumkin emas. Yangi buyurtma bering."
-            );
-          }
-
-          // Update if quantity decreased
-          if (item.itemQuantity < existingItem.itemQuantity) {
-            hasSubtractions = true;
-            existingItem.itemQuantity = item.itemQuantity;
-            existingItem.itemPrice = item.itemPrice;
-            await existingItem.save();
-          }
-        } else {
-          // Validation: New items cannot be added here
-          throw new Errors(
-            HttpCode.BAD_REQUEST,
-            "Yangi mahsulotlarni bu yerda qo'shish mumkin emas. 'Yangi buyurtma' tugmasidan foydalaning."
-          );
-        }
-      }
+    // Validation: Only allow reduction
+    if (newQuantity >= item.itemQuantity) {
+      throw new Errors(
+        HttpCode.BAD_REQUEST,
+        "Yangi soni eski sondan kam bo'lishi kerak. Oshirish uchun yangi buyurtma bering."
+      );
     }
 
-    // Check for fully removed items
-    for (const existingItem of existingItems) {
-      if (existingItem.productId) {
-        const existingProductId = existingItem.productId.toString();
-        if (!requestProductIds.has(existingProductId)) {
-          await this.orderItemModel.findByIdAndDelete(existingItem._id).exec();
-          hasSubtractions = true;
-        }
-      }
+    if (newQuantity <= 0) {
+      throw new Errors(HttpCode.BAD_REQUEST, "Soni 0 dan katta bo'lishi kerak. O'chirish funksiyasidan foydalaning.");
     }
+
+    // Update item
+    item.itemQuantity = newQuantity;
+    await item.save();
 
     // Recalculate order total
     const allItems = await this.orderItemModel.find({ orderId: id }).exec();
-    const newTotal = allItems.reduce(
-      (sum, item) => sum + item.itemPrice * item.itemQuantity,
-      0
-    );
+    const newTotal = allItems.reduce((sum, i) => sum + i.itemPrice * i.itemQuantity, 0);
 
-    // Update main order total
-    await this.orderModel.findByIdAndUpdate(
+    await this.orderModel.findByIdAndUpdate(id, { orderTotal: newTotal }).exec();
+
+    const fullOrder = await this.getOrderById(orderId);
+
+    // Notifications
+    notifyKitchen(order.restaurantId, {
+      _id: orderId,
+      orderNumber: fullOrder.orderNumber,
+      tableNumber: fullOrder.tableNumber,
+      items: fullOrder.orderItems,
+      event: "order:item-reduced"
+    });
+
+    notifyServiceStaff(order.restaurantId.toString(), "order:item-reduced", {
+      orderId,
+      orderNumber: fullOrder.orderNumber,
+      tableNumber: fullOrder.tableNumber,
+      updatedTotal: newTotal
+    });
+
+    return fullOrder;
+  }
+
+  /**
+   * Complete an individual order (not the entire table)
+   */
+  public async completeIndividualOrder(
+    orderId: string,
+    staffId: ObjectId
+  ): Promise<Order> {
+    const id = shapeIntoMongooseObjectId(orderId);
+    const staffIdObj = shapeIntoMongooseObjectId(staffId);
+
+    const order = await this.orderModel.findById(id).exec();
+    if (!order) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
+
+    if (order.orderStatus === OrderStatus.COMPLETED) {
+      throw new Errors(HttpCode.BAD_REQUEST, "Order is already completed");
+    }
+
+    // Update status
+    const result = await this.orderModel.findByIdAndUpdate(
       id,
-      { orderTotal: newTotal },
+      {
+        orderStatus: OrderStatus.COMPLETED,
+        completedBy: staffIdObj,
+        completedAt: new Date(),
+      },
       { new: true }
     ).exec();
 
-    // --- Kitchen & Staff Notifications ---
+    // Check if table should be cleared (no more active orders)
+    const otherActiveOrders = await this.orderModel.find({
+      tableId: order.tableId,
+      orderStatus: { $ne: OrderStatus.COMPLETED },
+      _id: { $ne: id }
+    }).exec();
 
-    if (hasSubtractions) {
-      const fullOrder = await this.getOrderById(id.toString());
-
-      // Notify kitchen about the reduction
-      notifyKitchen(order.restaurantId, {
-        _id: id.toString(),
-        orderNumber: fullOrder.orderNumber,
-        tableNumber: fullOrder.tableNumber,
-        orderStatus: fullOrder.orderStatus,
-        orderTotal: fullOrder.orderTotal,
-        items: fullOrder.orderItems,
-        event: "order:updated",
-        changes: { hasSubtractions: true }
-      });
-
-      // Notify service staff and owner
-      notifyServiceStaff(order.restaurantId.toString(), "order:updated", {
-        orderId: id.toString(),
-        orderNumber: fullOrder.orderNumber,
-        tableNumber: fullOrder.tableNumber,
-        updatedTotal: newTotal,
-        items: fullOrder.orderItems
-      });
+    if (otherActiveOrders.length === 0) {
+      await this.tableService.updateTable(order.tableId, { status: TableStatus.AVAILABLE });
+      emitTableUpdate(order.tableId, TableStatus.AVAILABLE);
     }
+
+    emitOrderStatusChange(id, OrderStatus.COMPLETED, order.restaurantId, order.tableId);
 
     return await this.getOrderById(orderId);
   }

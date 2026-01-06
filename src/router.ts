@@ -76,18 +76,41 @@ router.get(
     orderController.getOrderByStaff
 );
 
+router.post(
+    "/staff/order/:tableId/createOrder",
+    memberController.verifyAuth,
+    verifyServiceStaff,
+    qrController.createOrder
+);
+
 router.delete(
     "/orders/:id/items/:itemId",
     memberController.verifyAuth,
     verifyServiceStaff,
     orderController.deleteOrderItem
 );
+
+router.patch(
+    "/orders/:id/items/:itemId",
+    memberController.verifyAuth,
+    verifyServiceStaff,
+    orderController.reduceOrderItemQuantity
+);
+
 router.post(
     "/orders/:id/complete",
     memberController.verifyAuth,
     verifyServiceStaff,
     orderController.completeOrder
 );
+
+router.post(
+    "/orders/:id/complete-individual",
+    memberController.verifyAuth,
+    verifyServiceStaff,
+    orderController.completeIndividualOrder
+);
+
 router.post(
     "/orders/:id/cancel",
     memberController.verifyAuth,
@@ -109,25 +132,34 @@ router.post("/admin/order/:tableId/createOrder",
     verifyOwner,
     qrController.createOrder);
 
-router.post(
-    "/admin/orders/:id/items",
-    memberController.verifyAuth,
-    verifyOwner,
-    orderController.updateOrderItems
-);
-
 router.delete(
-    "/admin/orders/:id/items/:itemId",
+    "/admin/orders/:id/items/:itemId/delete",
     memberController.verifyAuth,
     verifyOwner,
     orderController.deleteOrderItem
 );
+
+router.patch(
+    "/admin/orders/:id/items/:itemId/reduce",
+    memberController.verifyAuth,
+    verifyOwner,
+    orderController.reduceOrderItemQuantity
+);
+
 router.post(
     "/admin/orders/:id/complete",
     memberController.verifyAuth,
     verifyOwner,
     orderController.completeOrder
 );
+
+router.post(
+    "/admin/orders/:id/complete-individual",
+    memberController.verifyAuth,
+    verifyOwner,
+    orderController.completeIndividualOrder
+);
+
 router.post(
     "/admin/orders/:id/cancel",
     memberController.verifyAuth,
