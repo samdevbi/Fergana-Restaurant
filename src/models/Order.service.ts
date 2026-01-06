@@ -598,62 +598,33 @@ class OrderService {
       { new: true }
     ).exec();
 
-    // --- Kitchen Notifications ---
+    // --- Kitchen & Staff Notifications ---
 
-    // 1. Handle Additions (New Kitchen Ticket)
-    if (additions.length > 0) {
-      const orderNumber = await this.generateDailyOrderNumber(order.restaurantId);
-      const additionTotal = additions.reduce((sum, i) => sum + (i.itemPrice * i.itemQuantity), 0);
+    if (additions.length > 0 || hasSubtractions) {
+      const fullOrder = await this.getOrderById(id.toString());
 
-      const kitchenTicket: Order = (await this.orderModel.create({
-        orderNumber: orderNumber,
-        restaurantId: order.restaurantId,
-        tableId: order.tableId,
-        tableNumber: order.tableNumber,
-        orderTotal: additionTotal,
-        orderStatus: OrderStatus.PROCESS,
-        orderType: OrderType.QR_ORDER,
-        memberId: null,
-      })) as unknown as Order;
-
-      await this.recordOrderItem(kitchenTicket._id, additions);
-
-      // Notify kitchen about new ticket
-      const fullKitchenTicket = await this.getOrderById(kitchenTicket._id.toString());
+      // Notify kitchen about the modification
       notifyKitchen(order.restaurantId, {
-        _id: kitchenTicket._id.toString(),
-        orderNumber: fullKitchenTicket.orderNumber,
-        tableNumber: fullKitchenTicket.tableNumber,
-        orderStatus: fullKitchenTicket.orderStatus,
-        orderTotal: fullKitchenTicket.orderTotal,
-        items: fullKitchenTicket.orderItems,
-        event: "order:new",
+        _id: id.toString(),
+        orderNumber: fullOrder.orderNumber,
+        tableNumber: fullOrder.tableNumber,
+        orderStatus: fullOrder.orderStatus,
+        orderTotal: fullOrder.orderTotal,
+        items: fullOrder.orderItems,
+        event: "order:updated", // Specifically mark as updated
+        changes: {
+          additions,
+          hasSubtractions
+        }
       });
-    }
 
-    // 2. Handle Subtractions (Update Original Kitchen Ticket)
-    // Note: Since we don't track which sub-order items belong to, we notify modifications on the master order
-    if (hasSubtractions || additions.length > 0) {
-      const fullOrder = await this.getOrderById(orderId);
-
-      // Notify kitchen about modification 
-      // (Only if there were subtractions, or to sync final state)
-      if (hasSubtractions) {
-        notifyKitchen(order.restaurantId, {
-          _id: orderId,
-          orderNumber: fullOrder.orderNumber,
-          tableNumber: fullOrder.tableNumber,
-          updatedOrder: fullOrder,
-          event: "order:items-modified",
-        });
-      }
-
-      // Notify service staff
-      notifyServiceStaff(order.restaurantId.toString(), "order:items-modified", {
-        orderId: orderId,
+      // Notify service staff and owner
+      notifyServiceStaff(order.restaurantId.toString(), "order:updated", {
+        orderId: id.toString(),
         orderNumber: fullOrder.orderNumber,
         tableNumber: fullOrder.tableNumber,
         updatedTotal: newTotal,
+        items: fullOrder.orderItems
       });
     }
 
