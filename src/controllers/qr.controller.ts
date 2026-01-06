@@ -40,7 +40,16 @@ qrController.getMenu = async (req: Request, res: Response) => {
                     order: "createdAt",
                 };
                 const products = await productService.getProducts(inquiry);
-                return res.status(HttpCode.OK).json({ menu: products, accessToken: token });
+                const table = await tableService.getTableById(tableId);
+                return res.status(HttpCode.OK).json({
+                    menu: products,
+                    accessToken: token,
+                    table: {
+                        _id: table._id,
+                        tableNumber: table.tableNumber,
+                        location: table.location
+                    }
+                });
             }
             // Invalid token? Continue to normal checks
         }
@@ -84,10 +93,15 @@ qrController.getMenu = async (req: Request, res: Response) => {
 
                     const products = await productService.getProducts(inquiry);
 
-                    // Return menu with token
+                    // Return menu with token and table info
                     return res.status(HttpCode.OK).json({
                         menu: products,
-                        accessToken: newToken
+                        accessToken: newToken,
+                        table: {
+                            _id: table._id,
+                            tableNumber: table.tableNumber,
+                            location: table.location
+                        }
                     });
                 } else {
                     // Customer said NO - it's not their order
@@ -123,10 +137,15 @@ qrController.getMenu = async (req: Request, res: Response) => {
 
                 const products = await productService.getProducts(inquiry);
 
-                // Return menu without confirmation with token
+                // Return menu without confirmation with token and table info
                 return res.status(HttpCode.OK).json({
                     menu: products,
-                    accessToken: newToken
+                    accessToken: newToken,
+                    table: {
+                        _id: table._id,
+                        tableNumber: table.tableNumber,
+                        location: table.location
+                    }
                 });
             }
 
@@ -136,6 +155,11 @@ qrController.getMenu = async (req: Request, res: Response) => {
                 needsConfirmation: true,
                 hasExistingOrder: true,
                 message: "Bu stolda faol zakaz mavjud. Bu zakaz siznikimi?",
+                table: {
+                    _id: table._id,
+                    tableNumber: table.tableNumber,
+                    location: table.location
+                },
                 existingOrder: {
                     orderId: existingOrderDetails._id,
                     orderNumber: existingOrderDetails.orderNumber,
@@ -158,10 +182,15 @@ qrController.getMenu = async (req: Request, res: Response) => {
 
         const products = await productService.getProducts(inquiry);
 
-        // Return menu with token
+        // Return menu with token and table info
         res.status(HttpCode.OK).json({
             menu: products,
-            accessToken: newToken
+            accessToken: newToken,
+            table: {
+                _id: table._id,
+                tableNumber: table.tableNumber,
+                location: table.location
+            }
         });
     } catch (err) {
         console.log("Error, getMenu:", err);
