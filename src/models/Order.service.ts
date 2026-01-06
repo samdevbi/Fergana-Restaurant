@@ -155,9 +155,6 @@ class OrderService {
 
     const restaurantId = table.restaurantId;
 
-    // Check if there's an existing active order on this table
-    const existingOrder = await this.getOrderByTable(tableId);
-
     // Calculate order total
     const amount = input.items.reduce((accumulator: number, item: OrderItemInput) => {
       return accumulator + item.itemPrice * item.itemQuantity;
@@ -167,7 +164,7 @@ class OrderService {
     const orderNumber = await this.generateDailyOrderNumber(restaurantId);
 
     try {
-      // Create NEW order for kitchen (always create new order)
+      // Create NEW order (Every buyurtma is independent)
       const newOrder: Order = (await this.orderModel.create({
         orderNumber: orderNumber,
         restaurantId: restaurantId,
@@ -181,47 +178,8 @@ class OrderService {
 
       const newOrderId = newOrder._id;
 
-      // Record order items for new order (kitchen will see this)
+      // Record order items for this specific order
       await this.recordOrderItem(newOrderId, input.items);
-
-      // If there's an existing active order, add items to it for staff/owner
-      if (existingOrder) {
-        // Add items to existing order (for staff/owner view)
-        await this.recordOrderItem(existingOrder._id, input.items);
-
-        // Recalculate existing order total
-        const existingItems = await this.orderItemModel.find({ orderId: existingOrder._id }).exec();
-        const newTotal = existingItems.reduce((sum, item) => sum + item.itemPrice * item.itemQuantity, 0);
-
-        // Update existing order total
-        await this.orderModel.findByIdAndUpdate(
-          existingOrder._id,
-          { orderTotal: newTotal },
-          { new: true }
-        ).exec();
-
-        // Get updated existing order
-        const updatedExistingOrder = await this.getOrderById(existingOrder._id.toString());
-
-        // Notify staff/owner that items were added to existing order
-        notifyServiceStaff(restaurantId.toString(), "order:items-added", {
-          orderId: existingOrder._id.toString(),
-          orderNumber: updatedExistingOrder.orderNumber,
-          tableNumber: updatedExistingOrder.tableNumber,
-          newItems: input.items,
-          updatedTotal: newTotal,
-        });
-      } else {
-        // No existing order - notify staff/owner about new order
-        notifyServiceStaff(restaurantId.toString(), "order:new", {
-          orderId: newOrderId.toString(),
-          orderNumber: newOrder.orderNumber,
-          tableNumber: newOrder.tableNumber,
-          orderStatus: newOrder.orderStatus,
-          orderTotal: newOrder.orderTotal,
-          items: input.items,
-        });
-      }
 
       // Update table status (allow multiple orders, just mark as occupied if first order)
       if (table.status !== TableStatus.OCCUPIED) {
@@ -232,15 +190,19 @@ class OrderService {
       const fullNewOrder = await this.getOrderById(newOrderId.toString());
 
       // Notify kitchen about new order (always send new order to kitchen)
-      notifyKitchen(restaurantId, {
+      const kitchenPayload = {
         _id: newOrderId.toString(),
         orderNumber: fullNewOrder.orderNumber,
         tableNumber: fullNewOrder.tableNumber,
         orderStatus: fullNewOrder.orderStatus,
         orderTotal: fullNewOrder.orderTotal,
         items: fullNewOrder.orderItems,
-        event: "order:new",
-      });
+      };
+
+      notifyKitchen(restaurantId, kitchenPayload);
+
+      // Notify service staff and owner about the NEW order
+      notifyServiceStaff(restaurantId, "order:new", kitchenPayload);
 
       emitTableUpdate(tableId, TableStatus.OCCUPIED, newOrderId);
 
