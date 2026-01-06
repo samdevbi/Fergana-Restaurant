@@ -149,47 +149,8 @@ class OrderService {
 
     const restaurantId = table.restaurantId;
 
-    // 2. DELTA LOGIC: Detect difference between "Requested" and "Already Active"
-    // This allows the Dashboard to send a cumulative list without double-counting.
-    const activeOrders = await this.getActiveOrdersByTableWithDetails(tableId);
-    const currentlyActiveQuantities = new Map<string, number>();
-
-    activeOrders.forEach((order) => {
-      order.orderItems?.forEach((item: any) => {
-        if (item.productId) {
-          const pid = item.productId.toString();
-          currentlyActiveQuantities.set(
-            pid,
-            (currentlyActiveQuantities.get(pid) || 0) + item.itemQuantity
-          );
-        }
-      });
-    });
-
-    const deltaItems: OrderItemInput[] = [];
-    input.items.forEach((item) => {
-      const pid = item.productId.toString();
-      const existingQty = currentlyActiveQuantities.get(pid) || 0;
-      const extraQty = item.itemQuantity - existingQty;
-
-      if (extraQty > 0) {
-        deltaItems.push({
-          productId: item.productId,
-          itemQuantity: extraQty,
-          itemPrice: item.itemPrice,
-        });
-      }
-    });
-
-    // If no new items or extra quantities, return existing data
-    if (deltaItems.length === 0) {
-      if (activeOrders.length > 0) return activeOrders[0];
-      // Note: This shouldn't normally happen if frontend is working correctly
-      return activeOrders[0];
-    }
-
-    // 3. Create NEW order only for the DELTA
-    const amount = deltaItems.reduce((acc, item) => acc + item.itemPrice * item.itemQuantity, 0);
+    // 2. Calculate total amount for the items in this specific request
+    const amount = input.items.reduce((acc, item) => acc + item.itemPrice * item.itemQuantity, 0);
     const orderNumber = await this.generateDailyOrderNumber(restaurantId);
 
     try {
@@ -205,7 +166,7 @@ class OrderService {
       })) as unknown as Order;
 
       const newOrderId = newOrder._id;
-      await this.recordOrderItem(newOrderId, deltaItems);
+      await this.recordOrderItem(newOrderId, input.items);
 
       // 4. Update table status
       if (table.status !== TableStatus.OCCUPIED) {
