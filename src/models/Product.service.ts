@@ -103,8 +103,10 @@ class ProductService {
 
     public async deleteProduct(id: string): Promise<Product> {
         const productId = shapeIntoMongooseObjectId(id);
-        // Hard delete: remove from database
-        const result = await this.productModel.findByIdAndDelete(productId).exec();
+        // Soft delete: update status to DELETE
+        const result = await this.productModel
+            .findByIdAndUpdate(productId, { productStatus: ProductStatus.DELETE }, { new: true })
+            .exec();
 
         if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
         return result as Product;

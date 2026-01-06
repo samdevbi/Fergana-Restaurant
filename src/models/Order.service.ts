@@ -74,9 +74,14 @@ class OrderService {
 
   private async recordOrderItem(orderId: ObjectId, input: OrderItemInput[]): Promise<void> {
     const promisedlist = input.map(async (item: OrderItemInput) => {
-      item.orderId = orderId;
-      item.productId = shapeIntoMongooseObjectId(item.productId);
-      await this.orderItemModel.create(item);
+      // Clone the item object to avoid mutating the original input reference
+      // which might be used in multiple recordOrderItem calls (e.g., merging)
+      const itemToSave = {
+        ...item,
+        orderId: orderId,
+        productId: shapeIntoMongooseObjectId(item.productId)
+      };
+      await this.orderItemModel.create(itemToSave);
       return "INSERTED";
     });
 
@@ -366,7 +371,7 @@ class OrderService {
           $nin: [OrderStatus.COMPLETED, OrderStatus.CANCELLED]
         }
       })
-      .sort({ createdAt: -1 }) // Get most recent order
+      .sort({ createdAt: 1 }) // Get THE OLDEST active order (Master Order)
       .exec();
 
     return result as Order | null;
