@@ -61,18 +61,6 @@ export interface OrderCreateInput {
     hasPermission?: boolean;
 }
 
-export interface OrderCompleteInput {
-    orderId: string;
-}
-
-export interface OrderCancelInput {
-    orderId: string;
-    reason?: string;
-}
-
-export interface OrderUpdateItemsInput {
-    items: OrderItemInput[];
-}
 
 export interface OrderConfirmationResponse {
     needsConfirmation?: boolean;

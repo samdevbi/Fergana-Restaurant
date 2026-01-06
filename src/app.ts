@@ -16,7 +16,6 @@ app.use(cors({
     allowedHeaders: ["Content-Type", "Authorization"],
 }));
 
-app.use("/uploads", express.static("./uploads"));
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -28,4 +27,4 @@ app.use("/", router);            // API Routes
 
 
 
-export default app;    // module.exports = app;  bu holat ayni commanJsda ishlatardik, lekin ESJS da export default qilib ishlatamiz
+export default app;

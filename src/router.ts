@@ -1,7 +1,6 @@
 import express from "express";
 const router = express.Router();
 import memberController from "./controllers/member.controller";
-import makeUploader from "./libs/utils/uploader";
 import productController from "./controllers/product.controller";
 import orderController from "./controllers/order.controller";
 import qrController from "./controllers/qr.controller";
@@ -35,7 +34,6 @@ router.get(
 router.post(
     "/member/update",
     memberController.verifyAuth,
-    makeUploader("members").single("memberImage"),
     memberController.updateMember
 );
 
@@ -186,7 +184,6 @@ router.post(
     "/admin/products/create",
     memberController.verifyAuth,
     verifyOwner,
-    makeUploader("products").single("productImage"),
     productController.createNewProduct
 );
 router.get(
