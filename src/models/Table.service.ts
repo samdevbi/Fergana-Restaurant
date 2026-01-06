@@ -52,7 +52,7 @@ class TableService {
 
             // Generate QR code and upload to Cloudinary
             try {
-                const baseUrl = process.env.CLIENT_URL || process.env.FRONTEND_URL || "http://localhost:3000";
+                const baseUrl = process.env.CLIENT_URL || process.env.FRONTEND_URL || "https://clientsideapp.netlify.app";
                 const buffer = await generateQRCodeBuffer(
                     result._id.toString(),
                     restaurantId.toString(),
