@@ -472,17 +472,40 @@ class OrderService {
 
     // Recalculate order total
     const allItems = await this.orderItemModel.find({ orderId: id }).exec();
-    const newTotal = allItems.reduce(
-      (sum, item) => sum + item.itemPrice * item.itemQuantity,
-      0
-    );
 
-    // Update order total
-    await this.orderModel.findByIdAndUpdate(
-      id,
-      { orderTotal: newTotal },
-      { new: true }
-    ).exec();
+    // If order becomes empty, mark it as COMPLETED and check table status
+    if (allItems.length === 0) {
+      await this.orderModel.findByIdAndUpdate(id, {
+        orderTotal: 0,
+        orderStatus: OrderStatus.COMPLETED
+      }).exec();
+
+      // Check if table should be cleared (no more active orders)
+      const otherActiveOrders = await this.orderModel.find({
+        tableId: order.tableId,
+        orderStatus: { $ne: OrderStatus.COMPLETED },
+        _id: { $ne: id }
+      }).exec();
+
+      if (otherActiveOrders.length === 0) {
+        await this.tableService.updateTable(order.tableId, { status: TableStatus.AVAILABLE });
+        emitTableUpdate(order.tableId, TableStatus.AVAILABLE);
+      }
+
+      emitOrderStatusChange(id, OrderStatus.COMPLETED, order.restaurantId, order.tableId);
+    } else {
+      const newTotal = allItems.reduce(
+        (sum, item) => sum + item.itemPrice * item.itemQuantity,
+        0
+      );
+
+      // Update order total
+      await this.orderModel.findByIdAndUpdate(
+        id,
+        { orderTotal: newTotal },
+        { new: true }
+      ).exec();
+    }
 
     // Get full updated order
     const fullOrder = await this.getOrderById(orderId);
@@ -501,7 +524,7 @@ class OrderService {
       orderId: orderId,
       orderNumber: fullOrder.orderNumber,
       tableNumber: fullOrder.tableNumber,
-      updatedTotal: newTotal,
+      updatedTotal: fullOrder.orderTotal,
     });
 
     return fullOrder;
@@ -513,8 +536,7 @@ class OrderService {
    */
   public async reduceOrderItemQuantity(
     orderId: string,
-    itemId: string,
-    newQuantity: number
+    itemId: string
   ): Promise<Order> {
     const id = shapeIntoMongooseObjectId(orderId);
     const itemIdObj = shapeIntoMongooseObjectId(itemId);
@@ -531,16 +553,11 @@ class OrderService {
     const item = await this.orderItemModel.findOne({ _id: itemIdObj, orderId: id }).exec();
     if (!item) throw new Errors(HttpCode.NOT_FOUND, "Order item not found");
 
-    // Validation: Only allow reduction
-    if (newQuantity >= item.itemQuantity) {
-      throw new Errors(
-        HttpCode.BAD_REQUEST,
-        "Yangi soni eski sondan kam bo'lishi kerak. Oshirish uchun yangi buyurtma bering."
-      );
-    }
+    // Logic: Decrement by 1
+    const newQuantity = item.itemQuantity - 1;
 
     if (newQuantity <= 0) {
-      throw new Errors(HttpCode.BAD_REQUEST, "Soni 0 dan katta bo'lishi kerak. O'chirish funksiyasidan foydalaning.");
+      throw new Errors(HttpCode.BAD_REQUEST, "Soni 1 dan kamayishi mumkin emas. O'chirish funksiyasidan foydalaning.");
     }
 
     // Update item

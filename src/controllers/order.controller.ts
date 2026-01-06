@@ -113,13 +113,8 @@ orderController.deleteOrderItem = async (req: ExtendedRequest, res: Response) =>
 orderController.reduceOrderItemQuantity = async (req: ExtendedRequest, res: Response) => {
     try {
         const { id, itemId } = req.params;
-        const { quantity } = req.body;
 
-        if (typeof quantity !== 'number') {
-            throw new Errors(HttpCode.BAD_REQUEST, "quantity must be a number");
-        }
-
-        const result = await orderService.reduceOrderItemQuantity(id, itemId, quantity);
+        const result = await orderService.reduceOrderItemQuantity(id, itemId);
 
         res.status(HttpCode.OK).json(result);
     } catch (err) {
