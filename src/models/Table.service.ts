@@ -6,7 +6,8 @@ import { TableStatus } from "../libs/enums/table.enum";
 import { Types } from "mongoose";
 type ObjectId = Types.ObjectId;
 import OrderService from "./Order.service";
-import { generateQRCodeFile } from "../libs/utils/qrcode.generator";
+import { generateQRCodeBuffer } from "../libs/utils/qrcode.generator";
+import { uploadBufferToCloudinary } from "../libs/utils/cloudinary.uploader";
 
 class TableService {
     private readonly tableModel;
@@ -49,15 +50,16 @@ class TableService {
                 status: TableStatus.AVAILABLE,
             });
 
-            // Generate QR code image file (use CLIENT_URL for customer-facing QR codes)
+            // Generate QR code and upload to Cloudinary
             try {
                 const baseUrl = process.env.CLIENT_URL || process.env.FRONTEND_URL || "http://localhost:3000";
-                const qrCodeUrl = await generateQRCodeFile(
+                const buffer = await generateQRCodeBuffer(
                     result._id.toString(),
                     restaurantId.toString(),
-                    baseUrl,
-                    "./uploads/qrcodes"
+                    baseUrl
                 );
+
+                const qrCodeUrl = await uploadBufferToCloudinary(buffer, "qrcodes");
 
                 // Update table with QR code image URL
                 const updatedTable = await this.tableModel.findByIdAndUpdate(
