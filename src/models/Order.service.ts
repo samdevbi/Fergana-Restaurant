@@ -714,31 +714,34 @@ class OrderService {
       throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
     }
 
-    // Update order status
-    const result = await this.orderModel.findByIdAndUpdate(
-      id,
+    // 1. Find ALL active (non-completed) orders for this table
+    const activeOrders = await this.orderModel.find({
+      tableId: order.tableId,
+      orderStatus: { $ne: OrderStatus.COMPLETED }
+    }).exec();
+
+    const activeOrderIds = activeOrders.map((o: any) => o._id);
+
+    // 2. Update all active orders to COMPLETED (Bulk Update)
+    const result = await this.orderModel.updateMany(
+      { _id: { $in: activeOrderIds } },
       {
         orderStatus: OrderStatus.COMPLETED,
         completedBy: staffIdObj,
         completedAt: new Date(),
-      },
-      { new: true }
+      }
     ).exec();
 
-    if (!result) {
+    if (result.matchedCount === 0) {
       throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
     }
 
-    // Check if there are other active orders on this table
-    const activeOrders = await this.getOrderByTable(order.tableId);
+    // 3. Since we completed all active orders, the table is now definitely AVAILABLE
+    await this.tableService.updateTable(order.tableId, { status: TableStatus.AVAILABLE });
+    emitTableUpdate(order.tableId, TableStatus.AVAILABLE);
 
-    // Only free table if no other active orders exist
-    if (!activeOrders) {
-      await this.tableService.updateTable(order.tableId, { status: TableStatus.AVAILABLE });
-      emitTableUpdate(order.tableId, TableStatus.AVAILABLE);
-    }
-
-    // Notify staff and owner about order completion
+    // 4. Notify staff and owner about the bulk completion
+    // We emit status change for the primarily triggered order
     emitOrderStatusChange(
       id,
       OrderStatus.COMPLETED,
@@ -746,7 +749,7 @@ class OrderService {
       order.tableId
     );
 
-    // Get full order
+    // Get full updated order to return
     const fullOrder = await this.getOrderById(orderId);
 
     return fullOrder;
@@ -762,7 +765,7 @@ class OrderService {
   ): Promise<Order> {
     const id = shapeIntoMongooseObjectId(orderId);
 
-    // Get order to find tableId and other details before deletion
+    // Get the current order to find associated tableId
     const order = await this.orderModel.findById(id).exec();
     if (!order) {
       throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
@@ -773,27 +776,29 @@ class OrderService {
       throw new Errors(HttpCode.BAD_REQUEST, "Cannot cancel completed order");
     }
 
-    // 1. Delete associated order items
-    await this.orderItemModel.deleteMany({ orderId: id }).exec();
+    // 1. Find ALL active (non-completed) orders for this table
+    const activeOrders = await this.orderModel.find({
+      tableId: order.tableId,
+      orderStatus: { $ne: OrderStatus.COMPLETED }
+    }).exec();
 
-    // 2. Delete the order itself (Hard Delete)
-    const result = await this.orderModel.findByIdAndDelete(id).exec();
+    const activeOrderIds = activeOrders.map((o: any) => o._id);
 
-    if (!result) {
-      throw new Errors(HttpCode.NOT_MODIFIED, Message.UPDATE_FAILED);
-    }
+    // 2. Delete all items associated with these active orders
+    await this.orderItemModel.deleteMany({
+      orderId: { $in: activeOrderIds }
+    }).exec();
 
-    // Check if there are other active orders on this table
-    const activeOrders = await this.getOrderByTable(order.tableId);
+    // 3. Delete all active orders from the table (Hard Delete)
+    await this.orderModel.deleteMany({
+      _id: { $in: activeOrderIds }
+    }).exec();
 
-    // Only free table if no other active orders exist
-    if (!activeOrders) {
-      await this.tableService.updateTable(order.tableId, { status: TableStatus.AVAILABLE });
-      emitTableUpdate(order.tableId, TableStatus.AVAILABLE);
-    }
+    // 4. Since we deleted all active orders, the table is now definitely AVAILABLE
+    await this.tableService.updateTable(order.tableId, { status: TableStatus.AVAILABLE });
+    emitTableUpdate(order.tableId, TableStatus.AVAILABLE);
 
-    // Notify staff and owner about order cancellation
-    // We pass the deleted order info for the notifications
+    // 5. Notify staff and owner about the bulk cancellation
     emitOrderStatusChange(
       id,
       "CANCELLED" as any,
@@ -801,13 +806,13 @@ class OrderService {
       order.tableId
     );
 
-    // Also send specific cancellation notification
     notifyServiceStaff(order.restaurantId.toString(), "order:cancelled", {
       orderId: id.toString(),
       orderNumber: order.orderNumber,
       tableNumber: order.tableNumber,
-      orderStatus: "DELETED", // Clarify it's actually gone
-      reason: reason || "Cancelled and deleted by staff",
+      orderStatus: "DELETED",
+      message: "Tushunmovchilik oldini olish uchun stoldagi barcha faol zakazlar o'chirildi.",
+      reason: reason || "Cancelled and table cleared by staff",
     });
 
     return order as unknown as Order;
@@ -910,7 +915,6 @@ class OrderService {
 
     return order;
   }
-
 }
 
 export default OrderService;
