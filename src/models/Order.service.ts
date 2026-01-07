@@ -169,6 +169,12 @@ class OrderService {
         restaurantLng
       );
 
+      console.log("--- GEOLOCATION DEBUG ---");
+      console.log(`Client: lat=${input.location.lat}, lng=${input.location.lng}`);
+      console.log(`Restaurant: lat=${restaurantLat}, lng=${restaurantLng}`);
+      console.log(`Calculated Distance: ${distance.toFixed(2)}m`);
+      console.log("--------------------------");
+
       if (distance > maxDistance) {
         console.warn(`Order rejected due to distance: ${distance.toFixed(2)}m (Max: ${maxDistance}m)`);
         throw new Errors(HttpCode.FORBIDDEN, `Buyurtma berish uchun restoran hududida bo'lishingiz shart (Masofa: ${distance.toFixed(0)}m).`);
