@@ -21,8 +21,8 @@ export interface Product {
 
 export interface ProductInquiry {
     order: string;
-    page: number;
-    limit: number;
+    page?: number;
+    limit?: number;
     productCollection?: ProductCollection;
     productStatus?: ProductStatus;
     search?: string;

@@ -28,14 +28,17 @@ class ProductService {
 
         const sort: T = inquiry.order === "productPrice" ? { [inquiry.order]: 1 } : { [inquiry.order]: -1 };
 
-        const result = await this.productModel
-            .aggregate([
-                { $match: match },
-                { $sort: sort },
-                { $skip: (inquiry.page * 1 - 1) * inquiry.limit },
-                { $limit: inquiry.limit * 1 },
-            ])
-            .exec();
+        const pipeline: any[] = [
+            { $match: match },
+            { $sort: sort },
+        ];
+
+        if (inquiry.page && inquiry.limit) {
+            pipeline.push({ $skip: (inquiry.page * 1 - 1) * inquiry.limit });
+            pipeline.push({ $limit: inquiry.limit * 1 });
+        }
+
+        const result = await this.productModel.aggregate(pipeline).exec();
         if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
 
         return result as Product[];
@@ -60,14 +63,17 @@ class ProductService {
 
         const sort: T = inquiry.order === "productPrice" ? { [inquiry.order]: 1 } : { [inquiry.order]: -1 };
 
-        const result = await this.productModel
-            .aggregate([
-                { $match: match },
-                { $sort: sort },
-                { $skip: (inquiry.page * 1 - 1) * inquiry.limit },
-                { $limit: inquiry.limit * 1 },
-            ])
-            .exec();
+        const pipeline: any[] = [
+            { $match: match },
+            { $sort: sort },
+        ];
+
+        if (inquiry.page && inquiry.limit) {
+            pipeline.push({ $skip: (inquiry.page * 1 - 1) * inquiry.limit });
+            pipeline.push({ $limit: inquiry.limit * 1 });
+        }
+
+        const result = await this.productModel.aggregate(pipeline).exec();
         if (!result) throw new Errors(HttpCode.NOT_FOUND, Message.NO_DATA_FOUND);
 
         return result as Product[];

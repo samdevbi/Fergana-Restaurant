@@ -22,9 +22,9 @@ productController.getProducts = async (req: Request, res: Response) => {
 
         const inquiry: ProductInquiry = {
             order: String(order) || "createdAt",
-            page: (pageNum && pageNum > 0) ? pageNum : 1,
-            limit: (limitNum && limitNum > 0) ? limitNum : 10,
         };
+        if (pageNum && pageNum > 0) inquiry.page = pageNum;
+        if (limitNum && limitNum > 0) inquiry.limit = limitNum;
         if (productCollection) {
             inquiry.productCollection = productCollection as ProductCollection;
         }
