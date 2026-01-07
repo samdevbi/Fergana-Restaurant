@@ -58,7 +58,10 @@ export interface OrderAdminInquiry {
 export interface OrderCreateInput {
     tableId: string;
     items: OrderItemInput[];
-    hasPermission?: boolean;
+    location?: {
+        lat: number;
+        lng: number;
+    };
 }
 
 

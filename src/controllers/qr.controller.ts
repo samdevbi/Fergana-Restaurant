@@ -214,6 +214,7 @@ qrController.createOrder = async (req: Request, res: Response) => {
         const input: OrderCreateInput = {
             tableId: tableId,
             items: req.body.items || [],
+            location: req.body.location,
         };
 
         // Basic validation - items required

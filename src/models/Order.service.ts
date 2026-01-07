@@ -138,15 +138,51 @@ class OrderService {
     return `ORD-${Date.now()}`;
   }
 
+  /**
+   * Calculate distance between two points in meters (Haversine formula)
+   */
+  private getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371e3; // Radius of the earth in meters
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
   public async createQROrder(input: OrderCreateInput, memberId?: ObjectId): Promise<Order> {
     const tableId = shapeIntoMongooseObjectId(input.tableId);
+
+    // 0. Geolocation check
+    const restaurantLat = Number(process.env.RESTAURANT_LAT);
+    const restaurantLng = Number(process.env.RESTAURANT_LNG);
+    const maxDistance = Number(process.env.MAX_DISTANCE) || 50;
+
+    if (restaurantLat && restaurantLng && input.location) {
+      const distance = this.getDistance(
+        input.location.lat,
+        input.location.lng,
+        restaurantLat,
+        restaurantLng
+      );
+
+      if (distance > maxDistance) {
+        console.warn(`Order rejected due to distance: ${distance.toFixed(2)}m (Max: ${maxDistance}m)`);
+        throw new Errors(HttpCode.FORBIDDEN, `Buyurtma berish uchun restoran hududida bo'lishingiz shart (Masofa: ${distance.toFixed(0)}m).`);
+      }
+    } else if (restaurantLat && restaurantLng && !input.location) {
+      // Enforce location if restaurant coordinates are configured
+      throw new Errors(HttpCode.BAD_REQUEST, "Joylashuvingizni aniqlashga ruxsat bering.");
+    }
 
     // 1. Get existing table info
     const table = await this.tableService.getTableById(tableId);
     if (table.status === TableStatus.PAUSE) {
       throw new Errors(HttpCode.FORBIDDEN, "Ushbu stol vaqtincha xizmat ko'rsatmayapti.");
     }
-
     const restaurantId = table.restaurantId;
 
     // 2. Calculate total amount for the items in this specific request
