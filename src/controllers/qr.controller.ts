@@ -106,18 +106,12 @@ qrController.getMenu = async (req: Request, res: Response) => {
                 } else {
                     // Customer said NO - it's not their order
                     // Return warning
-                    const existingOrderDetails = await orderService.getOrderById(existingOrder._id.toString());
+                    const allActiveOrders = await orderService.getActiveOrdersByTableWithDetails(tableId);
                     return res.status(HttpCode.OK).json({
                         needsStaffAction: true,
                         needsConfirmation: false,
                         message: "Bu stolda faol zakaz mavjud. Iltimos, xodimdan zakazni yopishni va stolni faollashtirishni so'rang.",
-                        existingOrder: {
-                            orderId: existingOrderDetails._id,
-                            orderNumber: existingOrderDetails.orderNumber,
-                            orderStatus: existingOrderDetails.orderStatus,
-                            orderTotal: existingOrderDetails.orderTotal,
-                            items: existingOrderDetails.orderItems,
-                        },
+                        existingOrders: allActiveOrders,
                     });
                 }
             }
@@ -150,7 +144,7 @@ qrController.getMenu = async (req: Request, res: Response) => {
             }
 
             // First time - ask customer for confirmation (order is older than 1 minute)
-            const existingOrderDetails = await orderService.getOrderById(existingOrder._id.toString());
+            const allActiveOrders = await orderService.getActiveOrdersByTableWithDetails(tableId);
             return res.status(HttpCode.OK).json({
                 needsConfirmation: true,
                 hasExistingOrder: true,
@@ -160,13 +154,7 @@ qrController.getMenu = async (req: Request, res: Response) => {
                     tableNumber: table.tableNumber,
                     location: table.location
                 },
-                existingOrder: {
-                    orderId: existingOrderDetails._id,
-                    orderNumber: existingOrderDetails.orderNumber,
-                    orderStatus: existingOrderDetails.orderStatus,
-                    orderTotal: existingOrderDetails.orderTotal,
-                    items: existingOrderDetails.orderItems,
-                },
+                existingOrders: allActiveOrders,
             });
         }
 

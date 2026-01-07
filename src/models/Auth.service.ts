@@ -30,7 +30,7 @@ class AuthService {
 
     public async createOrderToken(tableId: string) {
         return new Promise((resolve, reject) => {
-            const duration = `3h`; // 3 hours session for customer
+            const duration = `10m`; // 10 minutes session for customer
             const payload = { tableId, role: 'CUSTOMER' };
             jwt.sign(payload, process.env.SECRET_TOKEN as string, {
                 expiresIn: duration,

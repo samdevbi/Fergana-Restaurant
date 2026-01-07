@@ -68,11 +68,5 @@ export interface OrderConfirmationResponse {
     needsStaffAction?: boolean;
     isCustomerOrder?: boolean;
     message?: string;
-    existingOrder?: {
-        orderId: ObjectId;
-        orderNumber: string;
-        orderStatus: OrderStatus;
-        orderTotal: number;
-        items: OrderItem[];
-    };
+    existingOrders?: Order[];
 }

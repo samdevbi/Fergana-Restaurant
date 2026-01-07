@@ -10,9 +10,9 @@ const app = express();
 
 // CORS configuration - allow all origins
 app.use(cors({
-    origin: true, // Allow all origins
+    origin: [process.env.FRONTEND_URL, process.env.CLIENT_URL].filter(Boolean) as string[],
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
 }));
 
