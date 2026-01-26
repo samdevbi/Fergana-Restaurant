@@ -44,6 +44,9 @@ adminController.getDashboard = async (req: ExtendedRequest, res: Response) => {
             return sum + order.orderTotal;
         }, 0);
 
+        // Get daily sales statistics
+        const dailyStats = await orderService.getDailyStatistics(restaurantId);
+
         // Get all tables
         const tables = await tableService.getAllTables(restaurantId);
         const availableTables = tables.filter(t => t.status === TableStatus.AVAILABLE).length;
@@ -54,6 +57,14 @@ adminController.getDashboard = async (req: ExtendedRequest, res: Response) => {
             today: {
                 ordersCount: todayOrders.length,
                 revenue: todayRevenue,
+            },
+            statistics: {
+                dailyRevenue: dailyStats.dailyRevenue,
+                totalProductsSold: dailyStats.totalProductsSold,
+                dishItemsSold: dailyStats.dishItemsSold,
+                saladItemsSold: dailyStats.saladItemsSold,
+                dessertItemsSold: dailyStats.dessertItemsSold,
+                drinkItemsSold: dailyStats.drinkItemsSold,
             },
             tables: {
                 total: tables.length,
@@ -125,6 +136,98 @@ adminController.getPopularItems = async (req: ExtendedRequest, res: Response) =>
         });
     } catch (err) {
         console.log("Error, getPopularItems:", err);
+        if (err instanceof Errors) res.status(err.code).json(err);
+        else res.status(Errors.standard.code).json(Errors.standard);
+    }
+};
+
+/**
+ * Get weekly sales statistics
+ * Requires: JWT authentication + OWNER role
+ */
+adminController.getWeeklyStatistics = async (req: ExtendedRequest, res: Response) => {
+    try {
+        console.log("getWeeklyStatistics");
+
+        // Get restaurant owner (restaurantId)
+        const restaurant = await memberService.getRestaurant();
+        const restaurantId = restaurant._id;
+
+        const result = await orderService.getWeeklyStatistics(restaurantId);
+
+        res.status(HttpCode.OK).json(result);
+    } catch (err) {
+        console.log("Error, getWeeklyStatistics:", err);
+        if (err instanceof Errors) res.status(err.code).json(err);
+        else res.status(Errors.standard.code).json(Errors.standard);
+    }
+};
+
+/**
+ * Get monthly sales statistics
+ * Requires: JWT authentication + OWNER role
+ */
+adminController.getMonthlyStatistics = async (req: ExtendedRequest, res: Response) => {
+    try {
+        console.log("getMonthlyStatistics");
+
+        // Get restaurant owner (restaurantId)
+        const restaurant = await memberService.getRestaurant();
+        const restaurantId = restaurant._id;
+
+        const result = await orderService.getMonthlyStatistics(restaurantId);
+
+        res.status(HttpCode.OK).json(result);
+    } catch (err) {
+        console.log("Error, getMonthlyStatistics:", err);
+        if (err instanceof Errors) res.status(err.code).json(err);
+        else res.status(Errors.standard.code).json(Errors.standard);
+    }
+};
+
+/**
+ * Get weekly daily breakdown - products sold per day of the week
+ * Requires: JWT authentication + OWNER role
+ */
+adminController.getWeeklyDailyBreakdown = async (req: ExtendedRequest, res: Response) => {
+    try {
+        console.log("getWeeklyDailyBreakdown");
+
+        // Get restaurant owner (restaurantId)
+        const restaurant = await memberService.getRestaurant();
+        const restaurantId = restaurant._id;
+
+        const result = await orderService.getWeeklyDailyBreakdown(restaurantId);
+
+        res.status(HttpCode.OK).json({
+            breakdown: result,
+        });
+    } catch (err) {
+        console.log("Error, getWeeklyDailyBreakdown:", err);
+        if (err instanceof Errors) res.status(err.code).json(err);
+        else res.status(Errors.standard.code).json(Errors.standard);
+    }
+};
+
+/**
+ * Get monthly daily breakdown - products sold per day of the month
+ * Requires: JWT authentication + OWNER role
+ */
+adminController.getMonthlyDailyBreakdown = async (req: ExtendedRequest, res: Response) => {
+    try {
+        console.log("getMonthlyDailyBreakdown");
+
+        // Get restaurant owner (restaurantId)
+        const restaurant = await memberService.getRestaurant();
+        const restaurantId = restaurant._id;
+
+        const result = await orderService.getMonthlyDailyBreakdown(restaurantId);
+
+        res.status(HttpCode.OK).json({
+            breakdown: result,
+        });
+    } catch (err) {
+        console.log("Error, getMonthlyDailyBreakdown:", err);
         if (err instanceof Errors) res.status(err.code).json(err);
         else res.status(Errors.standard.code).json(Errors.standard);
     }

@@ -1,6 +1,5 @@
 import {
   Order,
-  OrderInquiry,
   OrderItemInput,
   OrderCreateInput,
   OrderAdminInquiry,
@@ -23,6 +22,7 @@ import {
   emitOrderStatusChange,
 } from "../libs/websocket/socket.handler";
 import { TableStatus } from "../libs/enums/table.enum";
+import { ProductCollection } from "../libs/enums/product.enum";
 
 class OrderService {
   private readonly orderModel;
@@ -855,6 +855,616 @@ class OrderService {
     }
 
     return order;
+  }
+
+  /**
+   * Get daily sales statistics
+   * Returns: daily revenue, total products sold, and counts by category (DISH, SALAD, DESSERT, DRINK)
+   */
+  public async getDailyStatistics(
+    restaurantId: ObjectId | string
+  ): Promise<{
+    dailyRevenue: number;
+    totalProductsSold: number;
+    dishItemsSold: number;
+    saladItemsSold: number;
+    dessertItemsSold: number;
+    drinkItemsSold: number;
+  }> {
+    const id = shapeIntoMongooseObjectId(restaurantId);
+
+    // Get today's date range
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Get all completed orders for today
+    const todayOrders = await this.orderModel
+      .find({
+        restaurantId: id,
+        orderStatus: OrderStatus.COMPLETED,
+        createdAt: {
+          $gte: today,
+          $lt: tomorrow,
+        },
+      })
+      .exec();
+
+    const orderIds = todayOrders.map((order: any) => order._id);
+
+    // Calculate daily revenue
+    const dailyRevenue = todayOrders.reduce((sum: number, order: any) => {
+      return sum + (order.orderTotal || 0);
+    }, 0);
+
+    // Get all order items for today's completed orders with product details
+    const orderItemsStats = await this.orderItemModel
+      .aggregate([
+        {
+          $match: {
+            orderId: { $in: orderIds },
+          },
+        },
+        {
+          $lookup: {
+            from: "products",
+            localField: "productId",
+            foreignField: "_id",
+            as: "product",
+          },
+        },
+        {
+          $unwind: {
+            path: "$product",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $group: {
+            _id: "$product.productCollection",
+            totalQuantity: { $sum: "$itemQuantity" },
+          },
+        },
+      ])
+      .exec();
+
+    // Calculate statistics by category
+    let totalProductsSold = 0;
+    let dishItemsSold = 0;
+    let saladItemsSold = 0;
+    let dessertItemsSold = 0;
+    let drinkItemsSold = 0;
+
+    orderItemsStats.forEach((stat: any) => {
+      const quantity = stat.totalQuantity || 0;
+      totalProductsSold += quantity;
+
+      switch (stat._id) {
+        case ProductCollection.DISH:
+          dishItemsSold += quantity;
+          break;
+        case ProductCollection.SALAD:
+          saladItemsSold += quantity;
+          break;
+        case ProductCollection.DESSERT:
+          dessertItemsSold += quantity;
+          break;
+        case ProductCollection.DRINK:
+          drinkItemsSold += quantity;
+          break;
+      }
+    });
+
+    return {
+      dailyRevenue,
+      totalProductsSold,
+      dishItemsSold,
+      saladItemsSold,
+      dessertItemsSold,
+      drinkItemsSold,
+    };
+  }
+
+  /**
+   * Get weekly sales statistics
+   * Returns: total revenue, orders count, products sold by category, top selling dish, most ordered table
+   */
+  public async getWeeklyStatistics(
+    restaurantId: ObjectId | string
+  ): Promise<{
+    totalRevenue: number;
+    ordersCount: number;
+    dishItemsSold: number;
+    saladItemsSold: number;
+    dessertItemsSold: number;
+    drinkItemsSold: number;
+    topSellingDish: {
+      productNameUz: string;
+      productNameKr: string;
+      quantity: number;
+    } | null;
+    mostOrderedTable: {
+      tableNumber: number;
+      orderCount: number;
+    } | null;
+  }> {
+    const id = shapeIntoMongooseObjectId(restaurantId);
+
+    // Get this week's date range (Monday to Sunday)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - daysToMonday);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 7);
+
+    return await this.getPeriodStatistics(id, weekStart, weekEnd);
+  }
+
+  /**
+   * Get monthly sales statistics
+   * Returns: total revenue, orders count, products sold by category, top selling dish, most ordered table
+   */
+  public async getMonthlyStatistics(
+    restaurantId: ObjectId | string
+  ): Promise<{
+    totalRevenue: number;
+    ordersCount: number;
+    dishItemsSold: number;
+    saladItemsSold: number;
+    dessertItemsSold: number;
+    drinkItemsSold: number;
+    topSellingDish: {
+      productNameUz: string;
+      productNameKr: string;
+      quantity: number;
+    } | null;
+    mostOrderedTable: {
+      tableNumber: number;
+      orderCount: number;
+    } | null;
+  }> {
+    const id = shapeIntoMongooseObjectId(restaurantId);
+
+    // Get this month's date range
+    const today = new Date();
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    monthStart.setHours(0, 0, 0, 0);
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    monthEnd.setHours(0, 0, 0, 0);
+
+    return await this.getPeriodStatistics(id, monthStart, monthEnd);
+  }
+
+  /**
+   * Helper method to get statistics for a given period
+   */
+  private async getPeriodStatistics(
+    restaurantId: ObjectId,
+    startDate: Date,
+    endDate: Date
+  ): Promise<{
+    totalRevenue: number;
+    ordersCount: number;
+    dishItemsSold: number;
+    saladItemsSold: number;
+    dessertItemsSold: number;
+    drinkItemsSold: number;
+    topSellingDish: {
+      productNameUz: string;
+      productNameKr: string;
+      quantity: number;
+    } | null;
+    mostOrderedTable: {
+      tableNumber: number;
+      orderCount: number;
+    } | null;
+  }> {
+    // Get all completed orders for the period
+    const orders = await this.orderModel
+      .find({
+        restaurantId: restaurantId,
+        orderStatus: OrderStatus.COMPLETED,
+        createdAt: {
+          $gte: startDate,
+          $lt: endDate,
+        },
+      })
+      .exec();
+
+    const orderIds = orders.map((order: any) => order._id);
+    const ordersCount = orders.length;
+
+    // Calculate total revenue
+    const totalRevenue = orders.reduce((sum: number, order: any) => {
+      return sum + (order.orderTotal || 0);
+    }, 0);
+
+    // Get order items statistics by category
+    const orderItemsStats = await this.orderItemModel
+      .aggregate([
+        {
+          $match: {
+            orderId: { $in: orderIds },
+          },
+        },
+        {
+          $lookup: {
+            from: "products",
+            localField: "productId",
+            foreignField: "_id",
+            as: "product",
+          },
+        },
+        {
+          $unwind: {
+            path: "$product",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $group: {
+            _id: "$product.productCollection",
+            totalQuantity: { $sum: "$itemQuantity" },
+          },
+        },
+      ])
+      .exec();
+
+    // Calculate statistics by category
+    let dishItemsSold = 0;
+    let saladItemsSold = 0;
+    let dessertItemsSold = 0;
+    let drinkItemsSold = 0;
+
+    orderItemsStats.forEach((stat: any) => {
+      const quantity = stat.totalQuantity || 0;
+
+      switch (stat._id) {
+        case ProductCollection.DISH:
+          dishItemsSold += quantity;
+          break;
+        case ProductCollection.SALAD:
+          saladItemsSold += quantity;
+          break;
+        case ProductCollection.DESSERT:
+          dessertItemsSold += quantity;
+          break;
+        case ProductCollection.DRINK:
+          drinkItemsSold += quantity;
+          break;
+      }
+    });
+
+    // Get top selling dish (only DISH category)
+    const topSellingDishResult = await this.orderItemModel
+      .aggregate([
+        {
+          $match: {
+            orderId: { $in: orderIds },
+          },
+        },
+        {
+          $lookup: {
+            from: "products",
+            localField: "productId",
+            foreignField: "_id",
+            as: "product",
+          },
+        },
+        {
+          $unwind: {
+            path: "$product",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $match: {
+            "product.productCollection": ProductCollection.DISH,
+          },
+        },
+        {
+          $group: {
+            _id: "$productId",
+            productNameUz: { $first: "$product.productNameUz" },
+            productNameKr: { $first: "$product.productNameKr" },
+            totalQuantity: { $sum: "$itemQuantity" },
+          },
+        },
+        {
+          $sort: { totalQuantity: -1 },
+        },
+        {
+          $limit: 1,
+        },
+      ])
+      .exec();
+
+    const topSellingDish =
+      topSellingDishResult && topSellingDishResult.length > 0
+        ? {
+            productNameUz: topSellingDishResult[0].productNameUz || "",
+            productNameKr: topSellingDishResult[0].productNameKr || "",
+            quantity: topSellingDishResult[0].totalQuantity || 0,
+          }
+        : null;
+
+    // Get most ordered table
+    const mostOrderedTableResult = await this.orderModel
+      .aggregate([
+        {
+          $match: {
+            restaurantId: restaurantId,
+            orderStatus: OrderStatus.COMPLETED,
+            createdAt: {
+              $gte: startDate,
+              $lt: endDate,
+            },
+          },
+        },
+        {
+          $group: {
+            _id: "$tableNumber",
+            orderCount: { $sum: 1 },
+          },
+        },
+        {
+          $sort: { orderCount: -1 },
+        },
+        {
+          $limit: 1,
+        },
+      ])
+      .exec();
+
+    const mostOrderedTable =
+      mostOrderedTableResult && mostOrderedTableResult.length > 0
+        ? {
+            tableNumber: mostOrderedTableResult[0]._id || 0,
+            orderCount: mostOrderedTableResult[0].orderCount || 0,
+          }
+        : null;
+
+    return {
+      totalRevenue,
+      ordersCount,
+      dishItemsSold,
+      saladItemsSold,
+      dessertItemsSold,
+      drinkItemsSold,
+      topSellingDish,
+      mostOrderedTable,
+    };
+  }
+
+  /**
+   * Get weekly daily breakdown - products sold per day of the week
+   * Returns: array of daily statistics with day number and products sold count
+   */
+  public async getWeeklyDailyBreakdown(
+    restaurantId: ObjectId | string
+  ): Promise<
+    Array<{
+      dayOfWeek: number; // 1 = Monday, 2 = Tuesday, ..., 7 = Sunday
+      dayName: string; // "Monday", "Tuesday", etc.
+      productsSold: number;
+    }>
+  > {
+    const id = shapeIntoMongooseObjectId(restaurantId);
+
+    // Get this week's date range (Monday to Sunday)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - daysToMonday);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 7);
+
+    // Get all completed orders for the week
+    const orders = await this.orderModel
+      .find({
+        restaurantId: id,
+        orderStatus: OrderStatus.COMPLETED,
+        createdAt: {
+          $gte: weekStart,
+          $lt: weekEnd,
+        },
+      })
+      .exec();
+
+    const orderIds = orders.map((order: any) => order._id);
+
+    // Get order items grouped by day of week
+    const dailyStats = await this.orderItemModel
+      .aggregate([
+        {
+          $match: {
+            orderId: { $in: orderIds },
+          },
+        },
+        {
+          $lookup: {
+            from: "orders",
+            localField: "orderId",
+            foreignField: "_id",
+            as: "order",
+          },
+        },
+        {
+          $unwind: {
+            path: "$order",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $project: {
+            itemQuantity: 1,
+            orderDate: "$order.createdAt",
+          },
+        },
+        {
+          $group: {
+            _id: {
+              $dayOfWeek: "$orderDate", // 1 = Sunday, 2 = Monday, ..., 7 = Saturday
+            },
+            totalQuantity: { $sum: "$itemQuantity" },
+          },
+        },
+        {
+          $sort: { _id: 1 },
+        },
+      ])
+      .exec();
+
+    // Map MongoDB dayOfWeek (1=Sunday, 2=Monday, ..., 7=Saturday) to our format (1=Monday, 7=Sunday)
+    const dayNames = [
+      "Sunday", // 0
+      "Monday", // 1
+      "Tuesday", // 2
+      "Wednesday", // 3
+      "Thursday", // 4
+      "Friday", // 5
+      "Saturday", // 6
+    ];
+
+    // MongoDB $dayOfWeek: 1=Sunday, 2=Monday, 3=Tuesday, 4=Wednesday, 5=Thursday, 6=Friday, 7=Saturday
+    // Our format: 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday, 7=Sunday
+
+    // Initialize all days with 0
+    const result: Array<{
+      dayOfWeek: number;
+      dayName: string;
+      productsSold: number;
+    }> = [];
+
+    // Our format: 1=Monday, 2=Tuesday, ..., 7=Sunday
+    for (let i = 1; i <= 7; i++) {
+      // Convert our format to MongoDB format
+      // Our 1 (Monday) = MongoDB 2
+      // Our 2 (Tuesday) = MongoDB 3
+      // ...
+      // Our 6 (Saturday) = MongoDB 7
+      // Our 7 (Sunday) = MongoDB 1
+      const mongoDayOfWeek = i === 7 ? 1 : i + 1;
+      const stat = dailyStats.find((s: any) => s._id === mongoDayOfWeek);
+      
+      // Get day name: our 1=Monday (index 1), our 7=Sunday (index 0)
+      const dayNameIndex = i === 7 ? 0 : i;
+      
+      result.push({
+        dayOfWeek: i,
+        dayName: dayNames[dayNameIndex],
+        productsSold: stat ? stat.totalQuantity : 0,
+      });
+    }
+
+    return result;
+  }
+
+  /**
+   * Get monthly daily breakdown - products sold per day of the month
+   * Returns: array of daily statistics with day number and products sold count
+   */
+  public async getMonthlyDailyBreakdown(
+    restaurantId: ObjectId | string
+  ): Promise<
+    Array<{
+      day: number; // 1, 2, 3, ..., 31
+      productsSold: number;
+    }>
+  > {
+    const id = shapeIntoMongooseObjectId(restaurantId);
+
+    // Get this month's date range
+    const today = new Date();
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    monthStart.setHours(0, 0, 0, 0);
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    monthEnd.setHours(0, 0, 0, 0);
+
+    // Get all completed orders for the month
+    const orders = await this.orderModel
+      .find({
+        restaurantId: id,
+        orderStatus: OrderStatus.COMPLETED,
+        createdAt: {
+          $gte: monthStart,
+          $lt: monthEnd,
+        },
+      })
+      .exec();
+
+    const orderIds = orders.map((order: any) => order._id);
+
+    // Get order items grouped by day of month
+    const dailyStats = await this.orderItemModel
+      .aggregate([
+        {
+          $match: {
+            orderId: { $in: orderIds },
+          },
+        },
+        {
+          $lookup: {
+            from: "orders",
+            localField: "orderId",
+            foreignField: "_id",
+            as: "order",
+          },
+        },
+        {
+          $unwind: {
+            path: "$order",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $project: {
+            itemQuantity: 1,
+            orderDate: "$order.createdAt",
+          },
+        },
+        {
+          $group: {
+            _id: {
+              $dayOfMonth: "$orderDate",
+            },
+            totalQuantity: { $sum: "$itemQuantity" },
+          },
+        },
+        {
+          $sort: { _id: 1 },
+        },
+      ])
+      .exec();
+
+    // Get number of days in current month
+    const daysInMonth = new Date(
+      today.getFullYear(),
+      today.getMonth() + 1,
+      0
+    ).getDate();
+
+    // Initialize all days with 0
+    const result: Array<{
+      day: number;
+      productsSold: number;
+    }> = [];
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const stat = dailyStats.find((s: any) => s._id === day);
+      result.push({
+        day: day,
+        productsSold: stat ? stat.totalQuantity : 0,
+      });
+    }
+
+    return result;
   }
 }
 

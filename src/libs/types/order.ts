@@ -63,13 +63,3 @@ export interface OrderCreateInput {
         lng: number;
     };
 }
-
-
-export interface OrderConfirmationResponse {
-    needsConfirmation?: boolean;
-    hasExistingOrder?: boolean;
-    needsStaffAction?: boolean;
-    isCustomerOrder?: boolean;
-    message?: string;
-    existingOrders?: Order[];
-}

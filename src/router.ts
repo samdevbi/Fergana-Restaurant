@@ -277,5 +277,29 @@ router.get(
     verifyOwner,
     adminController.getPopularItems
 );
+router.get(
+    "/admin/analytics/weekly",
+    memberController.verifyAuth,
+    verifyOwner,
+    adminController.getWeeklyStatistics
+);
+router.get(
+    "/admin/analytics/monthly",
+    memberController.verifyAuth,
+    verifyOwner,
+    adminController.getMonthlyStatistics
+);
+router.get(
+    "/admin/analytics/weekly/daily-breakdown",
+    memberController.verifyAuth,
+    verifyOwner,
+    adminController.getWeeklyDailyBreakdown
+);
+router.get(
+    "/admin/analytics/monthly/daily-breakdown",
+    memberController.verifyAuth,
+    verifyOwner,
+    adminController.getMonthlyDailyBreakdown
+);
 
 export default router;

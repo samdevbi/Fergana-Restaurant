@@ -95,17 +95,6 @@ export const handleConnection = (socket: ExtendedSocket) => {
 };
 
 /**
- * Emit order update to specific order room
- */
-export const emitOrderUpdate = (orderId: string | ObjectId, event: string, data: any) => {
-    if (!io) return;
-
-    const orderIdStr = orderId.toString();
-    io.to(`order:${orderIdStr}`).emit(event, data);
-    console.log(`Emitted ${event} to order:${orderIdStr}`);
-};
-
-/**
  * Notify kitchen of new order
  */
 export const notifyKitchen = (restaurantId: string | ObjectId, order: any) => {
@@ -125,17 +114,6 @@ export const notifyServiceStaff = (restaurantId: string | ObjectId, event: strin
     const restaurantIdStr = restaurantId.toString();
     io.to(`service:${restaurantIdStr}`).emit(event, data);
     console.log(`Notified service staff: ${event}`);
-};
-
-/**
- * Notify customer
- */
-export const notifyCustomer = (orderId: string | ObjectId, event: string, data: any) => {
-    if (!io) return;
-
-    const orderIdStr = orderId.toString();
-    io.to(`order:${orderIdStr}`).emit(event, data);
-    console.log(`Notified customer: ${event} for order:${orderIdStr}`);
 };
 
 /**
